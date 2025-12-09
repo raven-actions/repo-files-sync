@@ -1,0 +1,47 @@
+{
+  "name": "repo-file-sync-action",
+  "version": "1.21.1",
+  "description": "GitHub Action to keep files like Action workflows or entire directories in sync between multiple repositories.",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint ./src",
+    "start": "node src/index.js",
+    "build": "ncc build src/index.js -o dist -m --license licenses.txt"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/betahuhn/repo-file-sync-action.git"
+  },
+  "keywords": [
+    "sync",
+    "file-sync",
+    "workflow-sync",
+    "github-workflow",
+    "github-actions",
+    "github-action-workflow-sync"
+  ],
+  "author": "Maximilian Schiller <schiller@mxis.ch>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/betahuhn/repo-file-sync-action/issues"
+  },
+  "homepage": "https://github.com/marketplace/actions/repo-file-sync-action",
+  "dependencies": {
+    "@actions/core": "^1.10.0",
+    "@actions/github": "^5.1.1",
+    "@octokit/plugin-throttling": "^3.6.2",
+    "@putout/git-status-porcelain": "^1.1.0",
+    "action-input-parser": "^1.2.33",
+    "fs-extra": "^10.1.0",
+    "js-yaml": "^4.1.0",
+    "node-readfiles": "0.2.0",
+    "nunjucks": "^3.2.3"
+  },
+  "devDependencies": {
+    "@betahuhn/config": "^1.2.0",
+    "@octokit/core": "^3.6.0",
+    "@vercel/ncc": "^0.34.0",
+    "eslint": "^7.32.0"
+  }
+}
