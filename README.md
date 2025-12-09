@@ -1,8 +1,6 @@
-<div align="center">
-  
-# Repo File Sync Action
+# Repo Files Sync Action
 
-[![Build CI](https://github.com/BetaHuhn/repo-file-sync-action/workflows/Test%20CI/badge.svg)](https://github.com/BetaHuhn/repo-file-sync-action/actions?query=workflow%3A%22Test+CI%22) [![GitHub](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/BetaHuhn/repo-file-sync-action/blob/master/LICENSE) ![David](https://img.shields.io/david/betahuhn/repo-file-sync-action)
+[![Build CI](https://github.com/raven-actions/repo-files-sync/workflows/Test%20CI/badge.svg)](https://github.com/raven-actions/repo-files-sync/actions?query=workflow%3A%22Test+CI%22) [![GitHub](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/raven-actions/repo-files-sync/blob/master/LICENSE) ![David](https://img.shields.io/david/raven-actions/repo-files-sync)
 
 Keep files like Action workflows or entire directories in sync between multiple repositories.
 
@@ -10,7 +8,7 @@ Keep files like Action workflows or entire directories in sync between multiple 
 
 ## 👋 Introduction
 
-With [repo-file-sync-action](https://github.com/BetaHuhn/repo-file-sync-action) you can sync files, like workflow `.yml` files, configuration files or whole directories between repositories or branches. It works by running a GitHub Action in your main repository everytime you push something to that repo. The action will use a `sync.yml` config file to figure out which files it should sync where. If it finds a file which is out of sync it will open a pull request in the target repository with the changes.
+With [repo-file-sync-action](https://github.com/raven-actions/repo-files-sync) you can sync files, like workflow `.yml` files, configuration files or whole directories between repositories or branches. It works by running a GitHub Action in your main repository everytime you push something to that repo. The action will use a `sync.yml` config file to figure out which files it should sync where. If it finds a file which is out of sync it will open a pull request in the target repository with the changes.
 
 ## 🚀 Features
 
@@ -24,7 +22,6 @@ With [repo-file-sync-action](https://github.com/BetaHuhn/repo-file-sync-action) 
 
 ## 📚 Usage
 
-
 ### Workflow
 
 Create a `.yml` file in your `.github/workflows` folder (you can find more info about the structure in the [GitHub Docs](https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions)):
@@ -32,28 +29,30 @@ Create a `.yml` file in your `.github/workflows` folder (you can find more info 
 **.github/workflows/sync.yml**
 
 ```yml
-name: Sync Files
+name: Sync
+
 on:
   push:
     branches:
       - main
-      - master
   workflow_dispatch:
+
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@main
-      - name: Run GitHub File Sync
-        uses: BetaHuhn/repo-file-sync-action@v1
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run Files Sync
+        uses: raven-actions/repo-files-sync@v1
         with:
           GH_PAT: ${{ secrets.GH_PAT }}
 ```
 
 #### Token
 
-In order for the Action to access your repositories you have to specify a [Personal Access token](https://docs.github.com/en/free-pro-team@latest/github/authenticating-to-github/creating-a-personal-access-token) as the value for `GH_PAT` (`GITHUB_TOKEN` will **not** work). The PAT needs the full repo scope ([#31](https://github.com/BetaHuhn/repo-file-sync-action/discussions/31#discussioncomment-674804)).
+In order for the Action to access your repositories you have to specify a [Personal Access token](https://docs.github.com/en/free-pro-team@latest/github/authenticating-to-github/creating-a-personal-access-token) as the value for `GH_PAT` (`GITHUB_TOKEN` will **not** work). The PAT needs the full repo scope ([#31](https://github.com/raven-actions/repo-files-sync/discussions/31#discussioncomment-674804)).
 
 It is recommended to set the token as a
 [Repository Secret](https://docs.github.com/en/free-pro-team@latest/actions/reference/encrypted-secrets#creating-encrypted-secrets-for-a-repository).
@@ -87,26 +86,27 @@ More info on how to specify what files to sync where [below](#%EF%B8%8F-sync-con
 To always use the latest version of the action add the `latest` tag to the action name like this:
 
 ```yml
-uses: BetaHuhn/repo-file-sync-action@latest
+uses: raven-actions/repo-files-sync@latest
 ```
 
 If you want to make sure that your workflow doesn't suddenly break when a new major version is released, use the `v1` tag instead (recommended usage):
 
 ```yml
-uses: BetaHuhn/repo-file-sync-action@v1
+uses: raven-actions/repo-files-sync@v1
 ```
 
 With the `v1` tag you will always get the latest non-breaking version which will include potential bug fixes in the future. If you use a specific version, make sure to regularly check if a new version is available, or enable Dependabot.
 
 ## ⚙️ Action Inputs
 
-Here are all the inputs [repo-file-sync-action](https://github.com/BetaHuhn/repo-file-sync-action) takes:
+Here are all the inputs [repo-file-sync-action](https://github.com/raven-actions/repo-files-sync) takes:
 
 | Key | Value | Required | Default |
 | ------------- | ------------- | ------------- | ------------- |
 | `GH_PAT` | Your [Personal Access token](https://docs.github.com/en/free-pro-team@latest/github/authenticating-to-github/creating-a-personal-access-token) | **`GH_PAT` or `GH_INSTALLATION_TOKEN` required** | N/A |
 | `GH_INSTALLATION_TOKEN` | Token from a GitHub App installation | **`GH_PAT` or `GH_INSTALLATION_TOKEN` required** | N/A |
 | `CONFIG_PATH` | Path to the sync configuration file | **No** | .github/sync.yml |
+| `INLINE_CONFIG` | Inline YAML configuration (alternative to CONFIG_PATH) | **No** | N/A |
 | `IS_FINE_GRAINED` | Labels the GH_PAT as a fine grained token | **No** | false |
 | `PR_LABELS` | Labels which will be added to the pull request. Set to false to turn off | **No** | sync |
 | `ASSIGNEES` | Users to assign to the pull request | **No** | N/A |
@@ -126,6 +126,7 @@ Here are all the inputs [repo-file-sync-action](https://github.com/BetaHuhn/repo
 | `DRY_RUN` | Run everything except that nothing will be pushed | **No** | false |
 | `SKIP_CLEANUP` | Skips removing the temporary directory. Useful for debugging | **No** | false |
 | `SKIP_PR` | Skips creating a Pull Request and pushes directly to the default branch | **No** | false |
+| `DELETE_ORPHANED` | Global default for deleting orphaned files in target repositories | **No** | false |
 | `FORK` | A Github account username. Changes will be pushed to a fork of target repos on this account. | **No** | false |
 
 ### Outputs
@@ -134,7 +135,13 @@ The action sets the `pull_request_urls` output to the URLs of any created Pull R
 
 ## 🛠️ Sync Configuration
 
-In order to tell [repo-file-sync-action](https://github.com/BetaHuhn/repo-file-sync-action) what files to sync where, you have to create a `sync.yml` file in the `.github` directory of your main repository (see [action-inputs](#%EF%B8%8F-action-inputs) on how to change the location).
+In order to tell [repo-file-sync-action](https://github.com/raven-actions/repo-files-sync) what files to sync where, you have to create a `sync.yml` file in the `.github` directory of your main repository (see [action-inputs](#%EF%B8%8F-action-inputs) on how to change the location).
+
+> **💡 Tip:** For IDE validation and autocompletion, add this comment at the top of your `sync.yml`:
+>
+> ```yml
+> # yaml-language-server: $schema=https://raw.githubusercontent.com/raven-actions/repo-files-sync/main/sync.schema.json
+> ```
 
 The top-level key should be used to specify the target repository in the format `username`/`repository-name`@`branch`, after that you can list all the files you want to sync to that individual repository:
 
@@ -144,6 +151,26 @@ user/repo:
 user/repo2@develop:
   - path/to/file2.txt
 ```
+
+### Inline configuration
+
+Instead of using a configuration file, you can provide the sync configuration directly in your workflow using `INLINE_CONFIG`:
+
+```yml
+- name: Run Files Sync
+  uses: raven-actions/repo-files-sync@v1
+  with:
+    GH_PAT: ${{ secrets.GH_PAT }}
+    INLINE_CONFIG: |
+      user/repo:
+        - LICENSE
+        - .github/workflows/ci.yml
+      user/repo2:
+        - source: src/
+          dest: lib/
+```
+
+This is useful for simple configurations or when you want to keep everything in one file.
 
 There are multiple ways to specify which files to sync to each individual repository.
 
@@ -253,9 +280,44 @@ This is some content
 {% endblock %}
 ```
 
+#### Built-in template variables
+
+Every Nunjucks template context automatically includes a `repo` object with information about the target repository:
+
+| Variable | Description | Example |
+| -------- | ----------- | ------- |
+| `repo.url` | Full HTTPS URL | `https://github.com/user/repo` |
+| `repo.fullName` | Host + owner + name | `github.com/user/repo` |
+| `repo.uniqueName` | Full name with branch | `github.com/user/repo@main` |
+| `repo.host` | Host name | `github.com` |
+| `repo.user` | Owner/organization | `user` |
+| `repo.name` | Repository name | `repo` |
+| `repo.branch` | Target branch | `main` |
+
+This is useful for bulk templating across multiple repositories:
+
+```yml
+group:
+  repos: |
+    user/repo1
+    user/repo2
+  files:
+    - source: templates/README.md
+      dest: README.md
+      template: true
+```
+
+```md
+<!-- templates/README.md -->
+# {{ repo.name }}
+
+Repository: [{{ repo.fullName }}]({{ repo.url }})
+Maintained by: {{ repo.user }}
+```
+
 ### Delete orphaned files
 
-With the `deleteOrphaned` option you can choose to delete files in the target repository if they are deleted in the source repository. The option defaults to `false` and only works when [syncing entire directories](#sync-entire-directories):
+With the `deleteOrphaned` option you can choose to delete files in the target repository if they are deleted in the source repository. The option defaults to `false` and works for both directories and individual files:
 
 ```yml
 user/repo:
@@ -264,7 +326,14 @@ user/repo:
     deleteOrphaned: true
 ```
 
-It only takes effect on that specific directory.
+For single files, if the source file no longer exists and `deleteOrphaned` is `true`, the destination file will be removed:
+
+```yml
+user/repo:
+  - source: config.json
+    dest: config.json
+    deleteOrphaned: true
+```
 
 ### Sync the same files to multiple repositories
 
@@ -275,7 +344,7 @@ group:
   repos: |
     user/repo
     user/repo1
-  files: 
+  files:
     - source: workflows/build.yml
       dest: .github/workflows/build.yml
     - source: LICENSE.md
@@ -297,12 +366,52 @@ group:
       user/repo2
 
   # second group
-  - files: 
+  - files:
       - source: configs/dependabot.yml
         dest: .github/dependabot.yml
     repos: |
       user/repo3
       user/repo4
+```
+
+### Group-level reviewers
+
+You can specify reviewers at the group level to override the global `REVIEWERS` setting for specific groups:
+
+```yml
+group:
+  repos: |
+    user/repo1
+    user/repo2
+  files:
+    - source: rules/
+      dest: .cursor/rules/
+  reviewers:
+    - username1
+    - username2
+```
+
+This will automatically request a review from the specified users when PRs are created for repositories in this group.
+
+### Branch suffix for groups
+
+When syncing different file sets to the same repository, use `branchSuffix` to create unique PR branches:
+
+```yml
+group:
+  - repos: |
+      user/repo
+    files:
+      - source: config/
+        dest: config/
+    branchSuffix: config-sync
+
+  - repos: |
+      user/repo
+    files:
+      - source: workflows/
+        dest: .github/workflows/
+    branchSuffix: workflow-sync
 ```
 
 ### Syncing branches
@@ -354,13 +463,13 @@ group:
 
 ### Custom labels
 
-By default [repo-file-sync-action](https://github.com/BetaHuhn/repo-file-sync-action) will add the `sync` label to every PR it creates. You can turn this off by setting `PR_LABELS` to false, or specify your own labels:
+By default [repo-file-sync-action](https://github.com/raven-actions/repo-files-sync) will add the `sync` label to every PR it creates. You can turn this off by setting `PR_LABELS` to false, or specify your own labels:
 
 **.github/workflows/sync.yml**
 
 ```yml
 - name: Run GitHub File Sync
-  uses: BetaHuhn/repo-file-sync-action@v1
+  uses: raven-actions/repo-files-sync@v1
   with:
     GH_PAT: ${{ secrets.GH_PAT }}
     PR_LABELS: |
@@ -370,13 +479,13 @@ By default [repo-file-sync-action](https://github.com/BetaHuhn/repo-file-sync-ac
 
 ### Assign a user to the PR
 
-You can tell [repo-file-sync-action](https://github.com/BetaHuhn/repo-file-sync-action) to assign users to the PR with `ASSIGNEES`:
+You can tell [repo-file-sync-action](https://github.com/raven-actions/repo-files-sync) to assign users to the PR with `ASSIGNEES`:
 
 **.github/workflows/sync.yml**
 
 ```yml
 - name: Run GitHub File Sync
-  uses: BetaHuhn/repo-file-sync-action@v1
+  uses: raven-actions/repo-files-sync@v1
   with:
     GH_PAT: ${{ secrets.GH_PAT }}
     ASSIGNEES: BetaHuhn
@@ -384,13 +493,13 @@ You can tell [repo-file-sync-action](https://github.com/BetaHuhn/repo-file-sync-
 
 ### Request a PR review
 
-You can tell [repo-file-sync-action](https://github.com/BetaHuhn/repo-file-sync-action) to request a review of the PR from users with `REVIEWERS` and from teams with `TEAM_REVIEWERS`:
+You can tell [repo-file-sync-action](https://github.com/raven-actions/repo-files-sync) to request a review of the PR from users with `REVIEWERS` and from teams with `TEAM_REVIEWERS`:
 
 **.github/workflows/sync.yml**
 
 ```yml
 - name: Run GitHub File Sync
-  uses: BetaHuhn/repo-file-sync-action@v1
+  uses: raven-actions/repo-files-sync@v1
   with:
     GH_PAT: ${{ secrets.GH_PAT }}
     REVIEWERS: |
@@ -425,12 +534,12 @@ group:
 
 By default all new branches created in the target repo will be in the this format: `repo-sync/SOURCE_REPO_NAME/SOURCE_BRANCH_NAME`, with the SOURCE_REPO_NAME being replaced with the name of the source repo and SOURCE_BRANCH_NAME with the name of the source branch.
 
-If your repo name contains invalid characters, like a dot ([#32](https://github.com/BetaHuhn/repo-file-sync-action/issues/32)), you can specify a different prefix for the branch (the text before `/SOURCE_BRANCH_NAME`):
+If your repo name contains invalid characters, like a dot ([#32](https://github.com/raven-actions/repo-files-sync/issues/32)), you can specify a different prefix for the branch (the text before `/SOURCE_BRANCH_NAME`):
 
 **.github/workflows/sync.yml**
 
 ```yml
-uses: BetaHuhn/repo-file-sync-action@v1
+uses: raven-actions/repo-files-sync@v1
 with:
     GH_PAT: ${{ secrets.GH_PAT }}
     BRANCH_PREFIX: custom-branch
@@ -448,13 +557,14 @@ You can specify a custom commit body. This will be appended to the commit messag
 
 ```yml
 - name: Run GitHub File Sync
-  uses: BetaHuhn/repo-file-sync-action@v1
+  uses: raven-actions/repo-files-sync@v1
   with:
     GH_PAT: ${{ secrets.GH_PAT }}
     COMMIT_BODY: "Change-type: patch"
 ```
 
 The above example would result in a commit message that looks something like this:
+
 ```
 🔄 synced local '<filename>' with remote '<filename>'
 
@@ -469,7 +579,7 @@ You can add more content to the PR body with the `PR_BODY` option. For example:
 
 ```yml
 - name: Run GitHub File Sync
-  uses: BetaHuhn/repo-file-sync-action@v1
+  uses: raven-actions/repo-files-sync@v1
   with:
     GH_PAT: ${{ secrets.GH_PAT }}
     PR_BODY: This is your custom PR Body
@@ -491,14 +601,14 @@ This PR was created automatically by the repo-file-sync-action workflow run xxx.
 
 ### Fork and pull request workflow
 
-If you do not wish to grant this action write access to target repositories, you can specify a bot/user Github acccount that you do have access to with the `FORK` parameter. 
+If you do not wish to grant this action write access to target repositories, you can specify a bot/user Github acccount that you do have access to with the `FORK` parameter.
 
 A fork of each target repository will be created on this account, and all changes will be pushed to a branch on the fork, instead of upstream. Pull requests will be opened from the forks to target repositories.
 
 Note: while you can open pull requests to target repositories without write access, some features, like applying labels, are not possible.
 
 ```yml
-uses: BetaHuhn/repo-file-sync-action@v1
+uses: raven-actions/repo-files-sync@v1
 with:
     GH_PAT: ${{ secrets.GH_PAT }}
     FORK: file-sync-bot
@@ -506,7 +616,7 @@ with:
 
 ### Advanced sync config
 
-Here's how I keep common files in sync across my repositories. The main repository [`github-files`](https://github.com/BetaHuhn/github-files) contains all the files I want to sync and the [repo-file-sync-action](https://github.com/BetaHuhn/repo-file-sync-action) Action which runs on every push.
+Here's how I keep common files in sync across my repositories. The main repository [`github-files`](https://github.com/BetaHuhn/github-files) contains all the files I want to sync and the [repo-file-sync-action](https://github.com/raven-actions/repo-files-sync) Action which runs on every push.
 
 Using groups I can specify which file(s) should be synced to which repositories:
 
@@ -607,7 +717,7 @@ The actual source code of this library is in the `src` folder.
 
 - run `yarn lint` or `npm run lint` to run eslint.
 - run `yarn start` or `npm run start` to run the Action locally.
-- run `yarn build` or `npm run build` to produce a production version of [repo-file-sync-action](https://github.com/BetaHuhn/repo-file-sync-action) in the `dist` folder.
+- run `yarn build` or `npm run build` to produce a production version of [repo-file-sync-action](https://github.com/raven-actions/repo-files-sync) in the `dist` folder.
 
 ## ❔ About
 

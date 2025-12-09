@@ -1,3 +1,5 @@
+# CHANGELOG
+
 ## [v1.21.1] - 2024-05-05
 
 [Release notes](https://github.com/betahuhn/repo-file-sync-action/releases/tag/v1.21.1) · [Compare](https://github.com/betahuhn/repo-file-sync-action/compare/v1.21.0...v1.21.1) · [Tag](https://github.com/betahuhn/repo-file-sync-action/tree/v1.21.1) · Archive ([zip](https://github.com/betahuhn/repo-file-sync-action/archive/v1.21.1.zip) · [tar.gz](https://github.com/betahuhn/repo-file-sync-action/archive/v1.21.1.tar.gz))

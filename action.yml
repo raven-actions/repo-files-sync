@@ -1,6 +1,7 @@
-name: 'Repo File Sync Action'
-description: 'GitHub Action to Sync Files like Workflows Between Repositories.'
-author: 'BetaHuhn'
+---
+name: Repo Files Sync
+description: GitHub Action to Sync Files like Workflows Between Repositories.
+author: Raven Actions
 
 inputs:
   GH_PAT:
@@ -12,10 +13,14 @@ inputs:
       GitHub App Installation Token to used to access repos
     required: false
   CONFIG_PATH:
-    description: | 
+    description: |
       The path for the sync configuration file
     required: false
-  IS_FINE_GRAINED: 
+  INLINE_CONFIG:
+    description: |
+      Inline YAML configuration (alternative to CONFIG_PATH). Allows specifying sync config directly in the workflow.
+    required: false
+  IS_FINE_GRAINED:
     description: |
       Label GH_PAT as a fine grained token
     required: false
@@ -85,26 +90,33 @@ inputs:
     required: false
   SKIP_PR:
     description: |
-      Skips creating a Pull Request and pushes directly to the default branch. Defaults to false
+      Skips creating a Pull Request and pushes directly to the default branch.
+      Defaults to false
     required: false
   BRANCH_PREFIX:
     description: |
-      Specify a different prefix for the new branch in the target repo. Defaults to repo-sync/SOURCE_REPO_NAME
+      Specify a different prefix for the new branch in the target repo.
+      Defaults to repo-sync/SOURCE_REPO_NAME
+    required: false
+  DELETE_ORPHANED:
+    description: |
+      Global default for deleting orphaned files in target repositories.
+      Defaults to false
     required: false
   FORK:
     description: |
-      Specify the user account that will be used in a fork and pull-request workflow. Defaults
-      false.
+      Specify the user account for a fork and pull-request workflow.
+      Defaults to false.
     required: false
 
 outputs:
   pull_request_urls:
-    description: 'The URLs to the created Pull Requests as an array'
+    description: "The URLs to the created Pull Requests as an array"
 
 runs:
-  using: 'node20'
-  main: 'dist/index.js'
+  using: node24
+  main: dist/index.mjs
 
 branding:
-  icon: 'git-pull-request'
-  color: 'gray-dark'
+  icon: git-pull-request
+  color: gray-dark
