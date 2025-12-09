@@ -1,14 +1,12 @@
 # Repo Files Sync Action
 
-[![Build CI](https://github.com/raven-actions/repo-files-sync/workflows/Test%20CI/badge.svg)](https://github.com/raven-actions/repo-files-sync/actions?query=workflow%3A%22Test+CI%22) [![GitHub](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/raven-actions/repo-files-sync/blob/master/LICENSE) ![David](https://img.shields.io/david/raven-actions/repo-files-sync)
+[![Node CI](https://github.com/raven-actions/repo-files-sync/workflows/Node%20CI/badge.svg)](https://github.com/raven-actions/repo-files-sync/actions?query=workflow%3A%22Node+CI%22) [![Release CI](https://github.com/raven-actions/repo-files-sync/workflows/Release%20CI/badge.svg)](https://github.com/raven-actions/repo-files-sync/actions?query=workflow%3A%22Release+CI%22) [![GitHub](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/raven-actions/repo-files-sync/blob/master/LICENSE)
 
 Keep files like Action workflows or entire directories in sync between multiple repositories.
 
-</div>
-
 ## 👋 Introduction
 
-With [repo-file-sync-action](https://github.com/raven-actions/repo-files-sync) you can sync files, like workflow `.yml` files, configuration files or whole directories between repositories or branches. It works by running a GitHub Action in your main repository everytime you push something to that repo. The action will use a `sync.yml` config file to figure out which files it should sync where. If it finds a file which is out of sync it will open a pull request in the target repository with the changes.
+With [repo-files-sync](https://github.com/raven-actions/repo-files-sync) you can sync files, like workflow `.yml` files, configuration files or whole directories between repositories or branches. It works by running a GitHub Action in your main repository everytime you push something to that repo. The action will use a `sync.yml` config file to figure out which files it should sync where. If it finds a file which is out of sync it will open a pull request in the target repository with the changes.
 
 ## 🚀 Features
 
@@ -39,7 +37,7 @@ on:
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -99,7 +97,7 @@ With the `v1` tag you will always get the latest non-breaking version which will
 
 ## ⚙️ Action Inputs
 
-Here are all the inputs [repo-file-sync-action](https://github.com/raven-actions/repo-files-sync) takes:
+Here are all the inputs [repo-files-sync](https://github.com/raven-actions/repo-files-sync) takes:
 
 | Key | Value | Required | Default |
 | ------------- | ------------- | ------------- | ------------- |
@@ -135,7 +133,7 @@ The action sets the `pull_request_urls` output to the URLs of any created Pull R
 
 ## 🛠️ Sync Configuration
 
-In order to tell [repo-file-sync-action](https://github.com/raven-actions/repo-files-sync) what files to sync where, you have to create a `sync.yml` file in the `.github` directory of your main repository (see [action-inputs](#%EF%B8%8F-action-inputs) on how to change the location).
+In order to tell [repo-files-sync](https://github.com/raven-actions/repo-files-sync) what files to sync where, you have to create a `sync.yml` file in the `.github` directory of your main repository (see [action-inputs](#%EF%B8%8F-action-inputs) on how to change the location).
 
 > **💡 Tip:** For IDE validation and autocompletion, add this comment at the top of your `sync.yml`:
 >
@@ -244,7 +242,7 @@ user/repo:
     template:
       user:
         name: 'Maxi'
-        handle: '@BetaHuhn'
+        handle: '@rave-actions'
 ```
 
 In the source file you can then use these variables like this:
@@ -260,7 +258,7 @@ Result:
 ```yml
 # README.md
 
-Created by Maxi (@BetaHuhn)
+Created by Maxi (@rave-actions)
 ```
 
 You can also use `extends` with a relative path to inherit other templates. Take a look at Nunjucks [template syntax](https://mozilla.github.io/nunjucks/templating.html) for more info.
@@ -463,7 +461,7 @@ group:
 
 ### Custom labels
 
-By default [repo-file-sync-action](https://github.com/raven-actions/repo-files-sync) will add the `sync` label to every PR it creates. You can turn this off by setting `PR_LABELS` to false, or specify your own labels:
+By default [repo-files-sync](https://github.com/raven-actions/repo-files-sync) will add the `sync` label to every PR it creates. You can turn this off by setting `PR_LABELS` to false, or specify your own labels:
 
 **.github/workflows/sync.yml**
 
@@ -479,7 +477,7 @@ By default [repo-file-sync-action](https://github.com/raven-actions/repo-files-s
 
 ### Assign a user to the PR
 
-You can tell [repo-file-sync-action](https://github.com/raven-actions/repo-files-sync) to assign users to the PR with `ASSIGNEES`:
+You can tell [repo-files-sync](https://github.com/raven-actions/repo-files-sync) to assign users to the PR with `ASSIGNEES`:
 
 **.github/workflows/sync.yml**
 
@@ -488,12 +486,12 @@ You can tell [repo-file-sync-action](https://github.com/raven-actions/repo-files
   uses: raven-actions/repo-files-sync@v1
   with:
     GH_PAT: ${{ secrets.GH_PAT }}
-    ASSIGNEES: BetaHuhn
+    ASSIGNEES: rave-actions
 ```
 
 ### Request a PR review
 
-You can tell [repo-file-sync-action](https://github.com/raven-actions/repo-files-sync) to request a review of the PR from users with `REVIEWERS` and from teams with `TEAM_REVIEWERS`:
+You can tell [repo-files-sync](https://github.com/raven-actions/repo-files-sync) to request a review of the PR from users with `REVIEWERS` and from teams with `TEAM_REVIEWERS`:
 
 **.github/workflows/sync.yml**
 
@@ -503,8 +501,8 @@ You can tell [repo-file-sync-action](https://github.com/raven-actions/repo-files
   with:
     GH_PAT: ${{ secrets.GH_PAT }}
     REVIEWERS: |
-      BetaHuhn
-      BetaHuhnBot
+      rave-actions
+      rave-actions-bot
     TEAM_REVIEWERS: engineering
 ```
 
@@ -565,7 +563,7 @@ You can specify a custom commit body. This will be appended to the commit messag
 
 The above example would result in a commit message that looks something like this:
 
-```
+```text
 🔄 synced local '<filename>' with remote '<filename>'
 
 Change-type: patch
@@ -587,7 +585,7 @@ You can add more content to the PR body with the `PR_BODY` option. For example:
 
 It will be added below the first line of the body and above the list of changed files. The above example would result in a PR body that looks something like this:
 
-```
+```text
 synced local file(s) with GITHUB_REPOSITORY.
 
 This is your custom PR Body
@@ -596,7 +594,7 @@ This is your custom PR Body
 
 ---
 
-This PR was created automatically by the repo-file-sync-action workflow run xxx.
+This PR was created automatically by the repo-files-sync workflow run xxx.
 ```
 
 ### Fork and pull request workflow
@@ -616,7 +614,7 @@ with:
 
 ### Advanced sync config
 
-Here's how I keep common files in sync across my repositories. The main repository [`github-files`](https://github.com/BetaHuhn/github-files) contains all the files I want to sync and the [repo-file-sync-action](https://github.com/raven-actions/repo-files-sync) Action which runs on every push.
+Here's how I keep common files in sync across my repositories. The main repository [`github-files`](https://github.com/rave-actions/github-files) contains all the files I want to sync and the [repo-files-sync](https://github.com/raven-actions/repo-files-sync) Action which runs on every push.
 
 Using groups I can specify which file(s) should be synced to which repositories:
 
@@ -631,27 +629,27 @@ group:
       - source: workflows/dependencies/dependabot.yml
         dest: .github/workflows/dependabot.yml
     repos: |
-      BetaHuhn/do-spaces-action
-      BetaHuhn/running-at
-      BetaHuhn/spaces-cli
-      BetaHuhn/metadata-scraper
-      BetaHuhn/ejs-serve
-      BetaHuhn/feedback-js
-      BetaHuhn/drkmd.js
+      rave-actions/do-spaces-action
+      rave-actions/running-at
+      rave-actions/spaces-cli
+      rave-actions/metadata-scraper
+      rave-actions/ejs-serve
+      rave-actions/feedback-js
+      rave-actions/drkmd.js
 
   # GitHub Sponsors config
   - files:
       - source: configs/FUNDING.yml
         dest: .github/FUNDING.yml
     repos: |
-      BetaHuhn/do-spaces-action
-      BetaHuhn/running-at
-      BetaHuhn/spaces-cli
-      BetaHuhn/qrgen
-      BetaHuhn/metadata-scraper
-      BetaHuhn/ejs-serve
-      BetaHuhn/feedback-js
-      BetaHuhn/drkmd.js
+      rave-actions/do-spaces-action
+      rave-actions/running-at
+      rave-actions/spaces-cli
+      rave-actions/qrgen
+      rave-actions/metadata-scraper
+      rave-actions/ejs-serve
+      rave-actions/feedback-js
+      rave-actions/drkmd.js
 
   # Semantic release
   - files:
@@ -662,51 +660,51 @@ group:
       - source: configs/release.config.js
         dest: release.config.js
     repos: |
-      BetaHuhn/do-spaces-action
-      BetaHuhn/metadata-scraper
-      BetaHuhn/feedback-js
-      BetaHuhn/drkmd.js
+      rave-actions/do-spaces-action
+      rave-actions/metadata-scraper
+      rave-actions/feedback-js
+      rave-actions/drkmd.js
 
   # Stale issues workflow
   - files:
       - source: workflows/issues/stale.yml
         dest: .github/workflows/stale.yml
     repos: |
-      BetaHuhn/do-spaces-action
-      BetaHuhn/running-at
-      BetaHuhn/spaces-cli
-      BetaHuhn/qrgen
-      BetaHuhn/metadata-scraper
-      BetaHuhn/ejs-serve
-      BetaHuhn/feedback-js
-      BetaHuhn/drkmd.js
+      rave-actions/do-spaces-action
+      rave-actions/running-at
+      rave-actions/spaces-cli
+      rave-actions/qrgen
+      rave-actions/metadata-scraper
+      rave-actions/ejs-serve
+      rave-actions/feedback-js
+      rave-actions/drkmd.js
 
   # Lint CI workflow
   - files:
       - source: workflows/node/lint.yml
         dest: .github/workflows/lint.yml
     repos: |
-      BetaHuhn/do-spaces-action
-      BetaHuhn/running-at
-      BetaHuhn/spaces-cli
-      BetaHuhn/metadata-scraper
-      BetaHuhn/ejs-serve
-      BetaHuhn/feedback-js
-      BetaHuhn/drkmd.js
+      rave-actions/do-spaces-action
+      rave-actions/running-at
+      rave-actions/spaces-cli
+      rave-actions/metadata-scraper
+      rave-actions/ejs-serve
+      rave-actions/feedback-js
+      rave-actions/drkmd.js
 
   # MIT License
   - files:
       - source: LICENSE
         dest: LICENSE
     repos: |
-      BetaHuhn/do-spaces-action
-      BetaHuhn/running-at
-      BetaHuhn/spaces-cli
-      BetaHuhn/qrgen
-      BetaHuhn/metadata-scraper
-      BetaHuhn/ejs-serve
-      BetaHuhn/feedback-js
-      BetaHuhn/drkmd.js
+      rave-actions/do-spaces-action
+      rave-actions/running-at
+      rave-actions/spaces-cli
+      rave-actions/qrgen
+      rave-actions/metadata-scraper
+      rave-actions/ejs-serve
+      rave-actions/feedback-js
+      rave-actions/drkmd.js
 ```
 
 ## 💻 Development
@@ -715,17 +713,41 @@ Issues and PRs are very welcome!
 
 The actual source code of this library is in the `src` folder.
 
-- run `yarn lint` or `npm run lint` to run eslint.
-- run `yarn start` or `npm run start` to run the Action locally.
-- run `yarn build` or `npm run build` to produce a production version of [repo-file-sync-action](https://github.com/raven-actions/repo-files-sync) in the `dist` folder.
+### Prerequisites
 
-## ❔ About
+- Node.js 24+
+- [pnpm](https://pnpm.io/) (recommended version: 10+)
 
-This project was developed by me ([@betahuhn](https://github.com/BetaHuhn)) in my free time. If you want to support me:
+### Scripts
 
-[![Donate via PayPal](https://img.shields.io/badge/paypal-donate-009cde.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=394RTSBEEEFEE)
+```bash
+# Install dependencies
+pnpm install
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/F1F81S2RK)
+# Run ESLint
+pnpm lint
+
+# Run TypeScript type checking
+pnpm typecheck
+
+# Run tests
+pnpm test
+
+# Run tests with coverage
+pnpm test:coverage
+
+# Run tests in watch mode
+pnpm test:watch
+
+# Build the Action
+pnpm build
+
+# Format code
+pnpm format
+
+# Run the Action locally (requires dist to be built)
+pnpm start
+```
 
 ### Credits
 
@@ -736,6 +758,6 @@ This Action was inspired by:
 
 ## 📄 License
 
-Copyright 2021 Maximilian Schiller
+Copyright 2025 Raven Actions
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
