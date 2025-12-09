@@ -1,6 +1,6 @@
 # Repo Files Sync Action
 
-[![Node CI](https://github.com/raven-actions/repo-files-sync/workflows/Node%20CI/badge.svg)](https://github.com/raven-actions/repo-files-sync/actions?query=workflow%3A%22Node+CI%22) [![Release CI](https://github.com/raven-actions/repo-files-sync/workflows/Release%20CI/badge.svg)](https://github.com/raven-actions/repo-files-sync/actions?query=workflow%3A%22Release+CI%22) [![GitHub](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/raven-actions/repo-files-sync/blob/master/LICENSE)
+[![CI](https://github.com/raven-actions/repo-files-sync/workflows/CI/badge.svg)](https://github.com/raven-actions/repo-files-sync/actions?query=workflow%3ACI) [![Release](https://github.com/raven-actions/repo-files-sync/workflows/Release/badge.svg)](https://github.com/raven-actions/repo-files-sync/actions?query=workflow%3ARelease) [![GitHub](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/raven-actions/repo-files-sync/blob/master/LICENSE)
 
 Keep files like Action workflows or entire directories in sync between multiple repositories.
 
