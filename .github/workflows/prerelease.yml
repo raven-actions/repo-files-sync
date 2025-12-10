@@ -74,6 +74,7 @@ jobs:
           noVersionBumpBehavior: patch
           noNewCommitBehavior: current
           skipInvalidTags: true
+          tagFilter: v[0-9]+\.[0-9]+\.[0-9]+$
 
       - name: Get bot details
         id: bot-details
@@ -83,7 +84,7 @@ jobs:
         id: version
         run: |
           NEXT_VERSION="${SEMVER_NEXT#v}"
-          PRERELEASE_VERSION="${NEXT_VERSION}-rc.${RUN_NUMBER}"
+          PRERELEASE_VERSION="${NEXT_VERSION}-rc.0"
           PRERELEASE_TAG="v${PRERELEASE_VERSION}"
           echo "next_version=${PRERELEASE_TAG}" >> "$GITHUB_OUTPUT"
           echo "Prerelease version: ${PRERELEASE_TAG}"
