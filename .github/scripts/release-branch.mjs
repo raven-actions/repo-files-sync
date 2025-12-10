@@ -12,7 +12,7 @@ import path from 'node:path'
  * @param {import('@actions/github').Context} params.context - GitHub Actions context
  * @param {import('@actions/core')} params.core - GitHub Actions core
  */
-export default async function createReleaseBranch({ github, context, core }) {
+export default async function main({ github, context, core }) {
   const { owner, repo } = context.repo
 
   // Get inputs
@@ -254,6 +254,9 @@ export default async function createReleaseBranch({ github, context, core }) {
   })
 
   core.info(`Created release branch ${releaseBranch} from main with verified commit ${commit.sha}`)
+
+  // Set outputs
+  core.setOutput('name', releaseBranch)
 
   return releaseBranch
 }

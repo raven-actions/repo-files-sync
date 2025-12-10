@@ -83,14 +83,7 @@ jobs:
         with:
           script: |
             const { default: script } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/release-branch.mjs`)
-
-            const releaseBranch = await script({
-              github,
-              context,
-              core
-            })
-
-            core.setOutput('name', releaseBranch)
+            await script({ github, context, core })
         env:
           INPUT_TAG: ${{ steps.release-details.outputs.version }}
           INPUT_FILES: |
