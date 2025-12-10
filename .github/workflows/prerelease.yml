@@ -83,7 +83,7 @@ jobs:
           prerelease: true
           generate_release_notes: false
           files: |
-            dist/**
+            dist
             LICENSE
             README.md
             action.yml
