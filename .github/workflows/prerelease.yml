@@ -11,6 +11,10 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: prerelease-${{ github.event.workflow_run.head_branch || 'main' }}
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build
