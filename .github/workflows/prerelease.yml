@@ -107,21 +107,31 @@ jobs:
           # Delete branch if it exists (remotely)
           gh api --method DELETE "/repos/${GITHUB_REPOSITORY}/git/refs/heads/${RELEASE_BRANCH}" 2>/dev/null || true
 
-          # Function to create blob via GitHub API using file input
-          create_blob() {
-            local file="$1"
-            local tmpfile
-            tmpfile=$(mktemp)
-            printf '{"content":"%s","encoding":"base64"}' "$(base64 -w 0 "$file")" > "$tmpfile"
+          # Helper: GitHub API call with standard headers
+          gh_api() {
             gh api \
-              --method POST \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              "/repos/${GITHUB_REPOSITORY}/git/blobs" \
-              --input "$tmpfile" \
-              --jq '.sha'
+              "$@"
+          }
+
+          # Helper: Create blob from file
+          create_blob() {
+            local tmpfile
+            tmpfile=$(mktemp)
+            printf '{"content":"%s","encoding":"base64"}' "$(base64 -w 0 "$1")" > "$tmpfile"
+            gh_api --method POST "/repos/${GITHUB_REPOSITORY}/git/blobs" --input "$tmpfile" --jq '.sha'
             rm -f "$tmpfile"
           }
+
+          # Helper: Create tree from JSON entries
+          create_tree() {
+            gh_api --method POST "/repos/${GITHUB_REPOSITORY}/git/trees" --input - <<< "$1" | jq -r '.sha'
+          }
+
+          # Get the current HEAD commit SHA from main branch (parent for new commit)
+          echo "Getting main branch HEAD..."
+          PARENT_SHA=$(gh_api "/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')
 
           # Create blobs for required files
           echo "Creating blobs..."
@@ -130,104 +140,45 @@ jobs:
           ACTION_BLOB=$(create_blob "action.yml")
           PUBLISH_BLOB=$(create_blob ".github/workflows/publish.yml")
 
-          # Build tree entries for dist files
-          DIST_TREE_ENTRIES="["
-          first=true
+          # Build dist tree entries
+          DIST_ENTRIES=""
           for file in dist/*; do
-            if [ -f "$file" ]; then
-              filename=$(basename "$file")
-              blob=$(create_blob "$file")
-              if [ "$first" = true ]; then
-                first=false
-              else
-                DIST_TREE_ENTRIES="${DIST_TREE_ENTRIES},"
-              fi
-              DIST_TREE_ENTRIES="${DIST_TREE_ENTRIES}{\"path\":\"${filename}\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"${blob}\"}"
-            fi
+            [[ -f "$file" ]] || continue
+            filename=$(basename "$file")
+            blob=$(create_blob "$file")
+            [[ -n "$DIST_ENTRIES" ]] && DIST_ENTRIES+=","
+            DIST_ENTRIES+="{\"path\":\"${filename}\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"${blob}\"}"
           done
-          DIST_TREE_ENTRIES="${DIST_TREE_ENTRIES}]"
 
-          # Create dist tree via API
-          echo "Creating dist tree..."
-          DIST_TREE=$(gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "/repos/${GITHUB_REPOSITORY}/git/trees" \
-            --input - <<EOF | jq -r '.sha'
-          {"tree": ${DIST_TREE_ENTRIES}}
-          EOF
-          )
+          # Create all trees
+          echo "Creating trees..."
+          DIST_TREE=$(create_tree "{\"tree\":[${DIST_ENTRIES}]}")
+          WORKFLOWS_TREE=$(create_tree "{\"tree\":[{\"path\":\"publish.yml\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"${PUBLISH_BLOB}\"}]}")
+          GITHUB_TREE=$(create_tree "{\"tree\":[{\"path\":\"workflows\",\"mode\":\"040000\",\"type\":\"tree\",\"sha\":\"${WORKFLOWS_TREE}\"}]}")
+          ROOT_TREE=$(create_tree "{\"tree\":[
+            {\"path\":\"LICENSE\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"${LICENSE_BLOB}\"},
+            {\"path\":\"README.md\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"${README_BLOB}\"},
+            {\"path\":\"action.yml\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"${ACTION_BLOB}\"},
+            {\"path\":\"dist\",\"mode\":\"040000\",\"type\":\"tree\",\"sha\":\"${DIST_TREE}\"},
+            {\"path\":\".github\",\"mode\":\"040000\",\"type\":\"tree\",\"sha\":\"${GITHUB_TREE}\"}
+          ]}")
 
-          # Create .github/workflows tree via API
-          echo "Creating workflows tree..."
-          WORKFLOWS_TREE=$(gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "/repos/${GITHUB_REPOSITORY}/git/trees" \
-            --input - <<EOF | jq -r '.sha'
-          {"tree": [
-            {"path": "publish.yml", "mode": "100644", "type": "blob", "sha": "${PUBLISH_BLOB}"}
-          ]}
-          EOF
-          )
-
-          # Create .github tree via API
-          echo "Creating .github tree..."
-          GITHUB_TREE=$(gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "/repos/${GITHUB_REPOSITORY}/git/trees" \
-            --input - <<EOF | jq -r '.sha'
-          {"tree": [
-            {"path": "workflows", "mode": "040000", "type": "tree", "sha": "${WORKFLOWS_TREE}"}
-          ]}
-          EOF
-          )
-
-          # Create root tree via API
-          echo "Creating root tree..."
-          ROOT_TREE=$(gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "/repos/${GITHUB_REPOSITORY}/git/trees" \
-            --input - <<EOF | jq -r '.sha'
-          {"tree": [
-            {"path": "LICENSE", "mode": "100644", "type": "blob", "sha": "${LICENSE_BLOB}"},
-            {"path": "README.md", "mode": "100644", "type": "blob", "sha": "${README_BLOB}"},
-            {"path": "action.yml", "mode": "100644", "type": "blob", "sha": "${ACTION_BLOB}"},
-            {"path": "dist", "mode": "040000", "type": "tree", "sha": "${DIST_TREE}"},
-            {"path": ".github", "mode": "040000", "type": "tree", "sha": "${GITHUB_TREE}"}
-          ]}
-          EOF
-          )
-
-          # Create commit via GitHub API (will be verified)
+          # Create commit with parent from main (will be verified)
           echo "Creating verified commit..."
-          COMMIT_SHA=$(gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "/repos/${GITHUB_REPOSITORY}/git/commits" \
+          COMMIT_SHA=$(gh_api --method POST "/repos/${GITHUB_REPOSITORY}/git/commits" \
             -f message="chore(release): ${RELEASE_TAG}" \
             -f tree="${ROOT_TREE}" \
+            -f "parents[]=${PARENT_SHA}" \
             --jq '.sha')
 
           # Create branch ref pointing to the new commit
           echo "Creating release branch..."
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "/repos/${GITHUB_REPOSITORY}/git/refs" \
+          gh_api --method POST "/repos/${GITHUB_REPOSITORY}/git/refs" \
             -f ref="refs/heads/${RELEASE_BRANCH}" \
             -f sha="${COMMIT_SHA}"
 
           echo "name=${RELEASE_BRANCH}" >> "$GITHUB_OUTPUT"
-          echo "Created release branch ${RELEASE_BRANCH} with verified commit ${COMMIT_SHA}"
+          echo "Created release branch ${RELEASE_BRANCH} from main with verified commit ${COMMIT_SHA}"
         env:
           RELEASE_TAG: ${{ steps.release-details.outputs.version }}
           GH_TOKEN: ${{ github.token }}
