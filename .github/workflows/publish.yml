@@ -21,11 +21,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
-      - name: Publish
-        id: publish
-        uses: actions/publish-action@23f4c6f12633a2da8f44938b71fde9afec138fb4 # v0.4.0
-        with:
-          source-tag: ${{ github.event.release.tag_name }}
+      # - name: Publish
+      #   id: publish
+      #   uses: actions/publish-action@23f4c6f12633a2da8f44938b71fde9afec138fb4 # v0.4.0
+      #   with:
+      #     source-tag: ${{ github.event.release.tag_name }}
 
       - name: Make Release Latest
         run: |
@@ -34,12 +34,20 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           GH_TOKEN: ${{ github.token }}
 
-      # - name: Remove Release Branch
-      #   run: |
-      #     RELEASE_BRANCH="release/${RELEASE_TAG}"
-      #     gh api --method DELETE "/repos/${GITHUB_REPOSITORY}/git/refs/heads/${RELEASE_BRANCH}" 2>/dev/null || true
-      #     echo "Deleted release branch ${RELEASE_BRANCH}"
-      #   env:
-      #     RELEASE_TAG: ${{ github.event.release.tag_name }}
-      #     GH_TOKEN: ${{ github.token }}
-      #     GITHUB_REPOSITORY: ${{ github.repository }}
+      - name: Remove Release Branch
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const releaseBranch = `release/${context.payload.release.tag_name}`
+            try {
+              await github.rest.git.deleteRef({
+                ...context.repo,
+                ref: `heads/${releaseBranch}`
+              })
+              core.info(`Deleted release branch ${releaseBranch}`)
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error
+              }
+              core.info(`Release branch ${releaseBranch} not found, skipping`)
+            }

@@ -71,36 +71,24 @@ export default async function main({ github, context, core }) {
 
   /**
    * Create a tree from entries
-   * @param {Array<{path: string, mode: string, type: string, sha: string}>} tree
+   * @param {Array<{path: string, mode: string, type: string, sha: string}>} entries
    * @returns {Promise<string>} - Tree SHA
    */
-  async function createTree(tree) {
+  async function createTree(entries) {
     const { data } = await github.rest.git.createTree({
       owner,
       repo,
-      tree
+      tree: entries
     })
     return data.sha
   }
 
   /**
-   * Recursively collect all files from a directory
-   * @param {string} dirPath - Directory path
-   * @returns {string[]} - Array of file paths relative to dirPath
+   * Normalize path separators to forward slashes
+   * @param {string} p - Path to normalize
+   * @returns {string} - Normalized path
    */
-  function collectFilesRecursively(dirPath) {
-    const files = []
-    const entries = fs.readdirSync(dirPath, { withFileTypes: true })
-    for (const entry of entries) {
-      const fullPath = path.join(dirPath, entry.name)
-      if (entry.isDirectory()) {
-        files.push(...collectFilesRecursively(fullPath))
-      } else if (entry.isFile()) {
-        files.push(fullPath)
-      }
-    }
-    return files
-  }
+  const normalizePath = p => p.replace(/\\/g, '/')
 
   /**
    * Build a nested tree structure from flat file paths
@@ -108,60 +96,52 @@ export default async function main({ github, context, core }) {
    * @returns {Promise<string>} - Root tree SHA
    */
   async function buildTreeFromFiles(fileBlobs) {
-    // Group files by their directory structure
-    // { '': [...root files], 'dir': [...], 'dir/subdir': [...] }
-    /** @type {Map<string, Array<{name: string, mode: string, type: string, sha: string}>>} */
+    /** @type {Map<string, Array<{path: string, mode: string, type: string, sha: string}>>} */
     const dirEntries = new Map()
 
-    // First pass: organize files into directories
+    // Organize files into their directories
     for (const { filePath, blobSha } of fileBlobs) {
-      const dir = path.dirname(filePath)
-      const name = path.basename(filePath)
-      const normalizedDir = dir === '.' ? '' : dir.replace(/\\/g, '/')
+      const dir = normalizePath(path.dirname(filePath))
+      const normalizedDir = dir === '.' ? '' : dir
 
       if (!dirEntries.has(normalizedDir)) {
         dirEntries.set(normalizedDir, [])
       }
-      /** @type {Array<{name: string, mode: string, type: string, sha: string}>} */ (dirEntries.get(normalizedDir)).push({
-        name,
+      dirEntries.get(normalizedDir)?.push({
+        path: path.basename(filePath),
         mode: '100644',
         type: 'blob',
         sha: blobSha
       })
     }
 
-    // Get all unique directories sorted by depth (deepest first)
-    const allDirs = [...dirEntries.keys()].filter(d => d !== '')
-    const uniqueDirs = new Set(allDirs)
-
-    // Also add parent directories that might only contain subdirs (no direct files)
-    for (const dir of allDirs) {
+    // Collect all unique directory paths (including parent dirs without direct files)
+    const uniqueDirs = new Set([...dirEntries.keys()].filter(d => d !== ''))
+    for (const dir of [...uniqueDirs]) {
       const parts = dir.split('/')
       for (let i = 1; i < parts.length; i++) {
         uniqueDirs.add(parts.slice(0, i).join('/'))
       }
     }
 
-    const sortedDirs = [...uniqueDirs].sort((a, b) => {
-      const depthA = a.split('/').length
-      const depthB = b.split('/').length
-      return depthB - depthA // Deepest first
-    })
+    // Sort directories deepest first for bottom-up tree creation
+    const sortedDirs = [...uniqueDirs].sort(
+      (a, b) => b.split('/').length - a.split('/').length
+    )
 
-    // Create trees from deepest to root, storing tree SHAs
+    // Create trees from deepest to root
     /** @type {Map<string, string>} */
     const treeShas = new Map()
 
     for (const dir of sortedDirs) {
       const entries = dirEntries.get(dir) || []
 
-      // Add subdirectory trees
-      for (const [subDir, sha] of treeShas) {
-        const parentDir = path.dirname(subDir).replace(/\\/g, '/')
-        const normalizedParent = parentDir === '.' ? '' : parentDir
-        if (normalizedParent === dir) {
+      // Add child directory trees
+      for (const [childDir, sha] of treeShas) {
+        const parentDir = normalizePath(path.dirname(childDir))
+        if ((parentDir === '.' ? '' : parentDir) === dir) {
           entries.push({
-            name: path.basename(subDir),
+            path: path.basename(childDir),
             mode: '040000',
             type: 'tree',
             sha
@@ -170,25 +150,16 @@ export default async function main({ github, context, core }) {
       }
 
       if (entries.length > 0) {
-        const treeEntries = entries.map(e => ({
-          path: e.name,
-          mode: e.mode,
-          type: e.type,
-          sha: e.sha
-        }))
-        const treeSha = await createTree(treeEntries)
-        treeShas.set(dir, treeSha)
+        treeShas.set(dir, await createTree(entries))
       }
     }
 
     // Build root tree
     const rootEntries = dirEntries.get('') || []
-
-    // Add top-level directory trees
     for (const [dir, sha] of treeShas) {
       if (!dir.includes('/')) {
         rootEntries.push({
-          name: dir,
+          path: dir,
           mode: '040000',
           type: 'tree',
           sha
@@ -196,24 +167,21 @@ export default async function main({ github, context, core }) {
       }
     }
 
-    const rootTreeEntries = rootEntries.map(e => ({
-      path: e.name,
-      mode: e.mode,
-      type: e.type,
-      sha: e.sha
-    }))
-
-    return await createTree(rootTreeEntries)
+    return createTree(rootEntries)
   }
 
   // Collect all files to include (expand directories)
   core.info('Collecting files...')
+  /** @type {string[]} */
   const allFiles = []
   for (const filePath of requiredFiles) {
-    const stat = fs.statSync(filePath)
-    if (stat.isDirectory()) {
-      const filesInDir = collectFilesRecursively(filePath)
-      allFiles.push(...filesInDir)
+    if (fs.statSync(filePath).isDirectory()) {
+      const files = fs.readdirSync(filePath, { recursive: true, withFileTypes: true })
+      for (const entry of files) {
+        if (entry.isFile()) {
+          allFiles.push(path.join(entry.parentPath, entry.name))
+        }
+      }
     } else {
       allFiles.push(filePath)
     }
@@ -221,11 +189,11 @@ export default async function main({ github, context, core }) {
 
   core.info(`Found ${allFiles.length} files to include`)
 
-  // Create blobs for all files
+  // Create blobs for all files in parallel
   core.info('Creating blobs...')
   const fileBlobs = await Promise.all(
     allFiles.map(async filePath => ({
-      filePath: filePath.replace(/\\/g, '/'),
+      filePath: normalizePath(filePath),
       blobSha: await createBlob(filePath)
     }))
   )
