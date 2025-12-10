@@ -83,8 +83,8 @@ jobs:
           tag_name: ${{ steps.release-details.outputs.version }}
           name: ${{ steps.release-details.outputs.version }}
           body: ${{ steps.release-details.outputs.content }}
-          draft: false
-          prerelease: false
+          draft: true
+          prerelease: true
           generate_release_notes: false
           files: |
             dist/**
