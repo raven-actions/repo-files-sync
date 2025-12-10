@@ -32,6 +32,13 @@ jobs:
         with:
           source-tag: ${{ github.event.release.tag_name }}
 
+      - name: Make Release Latest
+        run: |
+          gh release edit "${RELEASE_TAG}" --latest
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GH_TOKEN: ${{ github.token }}
+
       - name: Get Release Branch
         id: release-branch
         run: |
