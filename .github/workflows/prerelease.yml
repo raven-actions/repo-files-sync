@@ -92,7 +92,13 @@ jobs:
 
             core.setOutput('name', releaseBranch)
         env:
-          INPUT_RELEASE_TAG: ${{ steps.release-details.outputs.version }}
+          INPUT_TAG: ${{ steps.release-details.outputs.version }}
+          INPUT_FILES: |
+            LICENSE
+            README.md
+            action.yml
+            dist
+            .github/workflows/publish.yml
 
       - name: Create Draft Prerelease
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0

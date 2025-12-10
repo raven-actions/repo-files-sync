@@ -11,35 +11,21 @@ import path from 'node:path'
  * @param {import('@actions/github').GitHub} params.github - GitHub API client
  * @param {import('@actions/github').Context} params.context - GitHub Actions context
  * @param {import('@actions/core')} params.core - GitHub Actions core
- * @param {import('@actions/github-script').AsyncFunctionArguments} params.AsyncFunctionArguments - GitHub Script function arguments
  */
 export default async function createReleaseBranch({ github, context, core }) {
   const { owner, repo } = context.repo
 
-  // Get release tag from input
-  const releaseTag = core.getInput('RELEASE_TAG', { required: true })
+  // Get inputs
+  const releaseTag = core.getInput('TAG', { required: true })
+  const requiredFiles = core.getMultilineInput('FILES', { required: true })
 
   const releaseBranch = `release/${releaseTag}`
-
-  // Required files to include in release branch
-  const requiredFiles = [
-    'LICENSE',
-    'README.md',
-    'action.yml',
-    '.github/workflows/publish.yml'
-  ]
 
   // Validate required files exist
   for (const file of requiredFiles) {
     if (!fs.existsSync(file)) {
       throw new Error(`Required file missing: ${file}`)
     }
-  }
-
-  // Validate dist directory has files
-  const distPath = 'dist'
-  if (!fs.existsSync(distPath) || fs.readdirSync(distPath).length === 0) {
-    throw new Error('dist directory is empty or missing')
   }
 
   // Delete branch if it exists (remotely)
@@ -52,10 +38,10 @@ export default async function createReleaseBranch({ github, context, core }) {
     })
     core.info(`Deleted existing branch ${releaseBranch}`)
   } catch (error) {
-    if (error.status !== 422 && error.status !== 404) {
+    const err = /** @type {{ status?: number }} */ (error)
+    if (err.status !== 422 && err.status !== 404) {
       throw error
     }
-    // Branch doesn't exist, continue
   }
 
   // Get main branch HEAD SHA (parent for new commit)
@@ -97,52 +83,156 @@ export default async function createReleaseBranch({ github, context, core }) {
     return data.sha
   }
 
-  // Create blobs for required files
+  /**
+   * Recursively collect all files from a directory
+   * @param {string} dirPath - Directory path
+   * @returns {string[]} - Array of file paths relative to dirPath
+   */
+  function collectFilesRecursively(dirPath) {
+    const files = []
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name)
+      if (entry.isDirectory()) {
+        files.push(...collectFilesRecursively(fullPath))
+      } else if (entry.isFile()) {
+        files.push(fullPath)
+      }
+    }
+    return files
+  }
+
+  /**
+   * Build a nested tree structure from flat file paths
+   * @param {Array<{filePath: string, blobSha: string}>} fileBlobs - File paths with their blob SHAs
+   * @returns {Promise<string>} - Root tree SHA
+   */
+  async function buildTreeFromFiles(fileBlobs) {
+    // Group files by their directory structure
+    // { '': [...root files], 'dir': [...], 'dir/subdir': [...] }
+    /** @type {Map<string, Array<{name: string, mode: string, type: string, sha: string}>>} */
+    const dirEntries = new Map()
+
+    // First pass: organize files into directories
+    for (const { filePath, blobSha } of fileBlobs) {
+      const dir = path.dirname(filePath)
+      const name = path.basename(filePath)
+      const normalizedDir = dir === '.' ? '' : dir.replace(/\\/g, '/')
+
+      if (!dirEntries.has(normalizedDir)) {
+        dirEntries.set(normalizedDir, [])
+      }
+      /** @type {Array<{name: string, mode: string, type: string, sha: string}>} */ (dirEntries.get(normalizedDir)).push({
+        name,
+        mode: '100644',
+        type: 'blob',
+        sha: blobSha
+      })
+    }
+
+    // Get all unique directories sorted by depth (deepest first)
+    const allDirs = [...dirEntries.keys()].filter(d => d !== '')
+    const uniqueDirs = new Set(allDirs)
+
+    // Also add parent directories that might only contain subdirs (no direct files)
+    for (const dir of allDirs) {
+      const parts = dir.split('/')
+      for (let i = 1; i < parts.length; i++) {
+        uniqueDirs.add(parts.slice(0, i).join('/'))
+      }
+    }
+
+    const sortedDirs = [...uniqueDirs].sort((a, b) => {
+      const depthA = a.split('/').length
+      const depthB = b.split('/').length
+      return depthB - depthA // Deepest first
+    })
+
+    // Create trees from deepest to root, storing tree SHAs
+    /** @type {Map<string, string>} */
+    const treeShas = new Map()
+
+    for (const dir of sortedDirs) {
+      const entries = dirEntries.get(dir) || []
+
+      // Add subdirectory trees
+      for (const [subDir, sha] of treeShas) {
+        const parentDir = path.dirname(subDir).replace(/\\/g, '/')
+        const normalizedParent = parentDir === '.' ? '' : parentDir
+        if (normalizedParent === dir) {
+          entries.push({
+            name: path.basename(subDir),
+            mode: '040000',
+            type: 'tree',
+            sha
+          })
+        }
+      }
+
+      if (entries.length > 0) {
+        const treeEntries = entries.map(e => ({
+          path: e.name,
+          mode: e.mode,
+          type: e.type,
+          sha: e.sha
+        }))
+        const treeSha = await createTree(treeEntries)
+        treeShas.set(dir, treeSha)
+      }
+    }
+
+    // Build root tree
+    const rootEntries = dirEntries.get('') || []
+
+    // Add top-level directory trees
+    for (const [dir, sha] of treeShas) {
+      if (!dir.includes('/')) {
+        rootEntries.push({
+          name: dir,
+          mode: '040000',
+          type: 'tree',
+          sha
+        })
+      }
+    }
+
+    const rootTreeEntries = rootEntries.map(e => ({
+      path: e.name,
+      mode: e.mode,
+      type: e.type,
+      sha: e.sha
+    }))
+
+    return await createTree(rootTreeEntries)
+  }
+
+  // Collect all files to include (expand directories)
+  core.info('Collecting files...')
+  const allFiles = []
+  for (const filePath of requiredFiles) {
+    const stat = fs.statSync(filePath)
+    if (stat.isDirectory()) {
+      const filesInDir = collectFilesRecursively(filePath)
+      allFiles.push(...filesInDir)
+    } else {
+      allFiles.push(filePath)
+    }
+  }
+
+  core.info(`Found ${allFiles.length} files to include`)
+
+  // Create blobs for all files
   core.info('Creating blobs...')
-  const [licenseBlob, readmeBlob, actionBlob, publishBlob] = await Promise.all([
-    createBlob('LICENSE'),
-    createBlob('README.md'),
-    createBlob('action.yml'),
-    createBlob('.github/workflows/publish.yml')
-  ])
+  const fileBlobs = await Promise.all(
+    allFiles.map(async filePath => ({
+      filePath: filePath.replace(/\\/g, '/'),
+      blobSha: await createBlob(filePath)
+    }))
+  )
 
-  // Create blobs for dist files
-  const distFiles = fs.readdirSync(distPath).filter(file => {
-    const filePath = path.join(distPath, file)
-    return fs.statSync(filePath).isFile()
-  })
-
-  const distBlobPromises = distFiles.map(async file => {
-    const filePath = path.join(distPath, file)
-    const sha = await createBlob(filePath)
-    return { path: file, mode: '100644', type: 'blob', sha }
-  })
-  const distEntries = await Promise.all(distBlobPromises)
-
-  // Create all trees
+  // Build tree structure
   core.info('Creating trees...')
-
-  // Create dist tree
-  const distTreeSha = await createTree(distEntries)
-
-  // Create .github/workflows tree
-  const workflowsTreeSha = await createTree([
-    { path: 'publish.yml', mode: '100644', type: 'blob', sha: publishBlob }
-  ])
-
-  // Create .github tree
-  const githubTreeSha = await createTree([
-    { path: 'workflows', mode: '040000', type: 'tree', sha: workflowsTreeSha }
-  ])
-
-  // Create root tree
-  const rootTreeSha = await createTree([
-    { path: 'LICENSE', mode: '100644', type: 'blob', sha: licenseBlob },
-    { path: 'README.md', mode: '100644', type: 'blob', sha: readmeBlob },
-    { path: 'action.yml', mode: '100644', type: 'blob', sha: actionBlob },
-    { path: 'dist', mode: '040000', type: 'tree', sha: distTreeSha },
-    { path: '.github', mode: '040000', type: 'tree', sha: githubTreeSha }
-  ])
+  const rootTreeSha = await buildTreeFromFiles(fileBlobs)
 
   // Create commit with parent from main (will be verified)
   core.info('Creating verified commit...')
