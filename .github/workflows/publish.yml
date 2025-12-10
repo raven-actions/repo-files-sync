@@ -5,6 +5,8 @@ on:
   release:
     types: [published]
 
+permissions: {}
+
 jobs:
   publish:
     runs-on: ubuntu-24.04
@@ -18,7 +20,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - run: |
+      - name: Cleanup
+        run: |
           find . -maxdepth 1 \
             ! -name '.' \
             ! -name '.git' \
@@ -26,20 +29,15 @@ jobs:
             ! -name 'LICENSE' \
             ! -name 'action.yml' \
             -exec rm -rf {} +
-          ls -A
-          ls -a
-          ls
 
-      - run: |
-          gh release download "${RELEASE_TAG}" --clobber
-          ls
+      - name: Download Release Assets
+        run: |
+          mkdir -p dist
+          gh release download "${RELEASE_TAG}" --clobber --dir dist
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           GH_TOKEN: ${{ github.token }}
 
-      - run: |
-          ls
-
-      # - name: Publish
-      #   id: publish
-      #   uses: actions/publish-immutable-action@4bc8754ffc40f27910afb20287dbbbb675a4e978 # v0.0.4
+      - name: Publish
+        id: publish
+        uses: actions/publish-immutable-action@4bc8754ffc40f27910afb20287dbbbb675a4e978 # v0.0.4
