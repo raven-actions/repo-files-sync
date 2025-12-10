@@ -66,171 +66,167 @@ jobs:
           name: dist
           path: dist/
 
-      - name: Get next version
-        id: semver
-        uses: ietf-tools/semver-action@c90370b2958652d71c06a3484129a4d423a6d8a8 # v1.11.0
+      # - name: Get next version
+      #   id: semver
+      #   uses: ietf-tools/semver-action@c90370b2958652d71c06a3484129a4d423a6d8a8 # v1.11.0
+      #   with:
+      #     token: ${{ github.token }}
+      #     noVersionBumpBehavior: patch
+      #     noNewCommitBehavior: current
+      #     skipInvalidTags: true
+      #     tagFilter: v[0-9]+\.[0-9]+\.[0-9]+$
+
+      # - name: Determine prerelease version
+      #   id: version
+      #   run: |
+      #     NEXT_VERSION="${SEMVER_NEXT#v}"
+      #     PRERELEASE_VERSION="${NEXT_VERSION}"
+      #     PRERELEASE_TAG="v${PRERELEASE_VERSION}"
+      #     echo "next_version=${PRERELEASE_TAG}" >> "$GITHUB_OUTPUT"
+      #     echo "Prerelease version: ${PRERELEASE_TAG}"
+      #   env:
+      #     SEMVER_NEXT: ${{ steps.semver.outputs.next }}
+
+      # - name: Get bot details
+      #   id: bot-details
+      #   uses: raven-actions/bot-details@ee8966a9ff6e7e42cbfc4a56b4ddb60a9d1b40a6 # v1.2.0
+
+      # - name: Prepare release tree and create tag
+      #   id: prepare_release
+      #   run: |
+      #     # Delete existing tag/release if it exists (for draft prereleases)
+      #     if git rev-parse "$RELEASE_TAG" >/dev/null 2>&1; then
+      #       echo "Tag $RELEASE_TAG already exists, deleting it..."
+      #       gh release delete "$RELEASE_TAG" --yes || true
+      #       gh api --method DELETE "/repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}" || true
+      #       git tag -d "$RELEASE_TAG" || true
+      #     fi
+
+      #     # Function to create blob via GitHub API using file input
+      #     create_blob() {
+      #       local file="$1"
+      #       local tmpfile
+      #       tmpfile=$(mktemp)
+      #       # Create JSON payload with base64 content
+      #       printf '{"content":"%s","encoding":"base64"}' "$(base64 -w 0 "$file")" > "$tmpfile"
+      #       gh api \
+      #         --method POST \
+      #         -H "Accept: application/vnd.github+json" \
+      #         -H "X-GitHub-Api-Version: 2022-11-28" \
+      #         "/repos/${GITHUB_REPOSITORY}/git/blobs" \
+      #         --input "$tmpfile" \
+      #         --jq '.sha'
+      #       rm -f "$tmpfile"
+      #     }
+
+      #     # Create blobs for required files
+      #     echo "Creating blobs..."
+      #     LICENSE_BLOB=$(create_blob "LICENSE")
+      #     README_BLOB=$(create_blob "README.md")
+      #     ACTION_BLOB=$(create_blob "action.yml")
+
+      #     # Build tree entries for dist files
+      #     DIST_TREE_ENTRIES="["
+      #     first=true
+      #     for file in dist/*; do
+      #       if [ -f "$file" ]; then
+      #         filename=$(basename "$file")
+      #         blob=$(create_blob "$file")
+      #         if [ "$first" = true ]; then
+      #           first=false
+      #         else
+      #           DIST_TREE_ENTRIES="${DIST_TREE_ENTRIES},"
+      #         fi
+      #         DIST_TREE_ENTRIES="${DIST_TREE_ENTRIES}{\"path\":\"${filename}\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"${blob}\"}"
+      #       fi
+      #     done
+      #     DIST_TREE_ENTRIES="${DIST_TREE_ENTRIES}]"
+
+      #     # Create dist tree via API
+      #     echo "Creating dist tree..."
+      #     DIST_TREE=$(gh api \
+      #       --method POST \
+      #       -H "Accept: application/vnd.github+json" \
+      #       -H "X-GitHub-Api-Version: 2022-11-28" \
+      #       "/repos/${GITHUB_REPOSITORY}/git/trees" \
+      #       --input - <<EOF | jq -r '.sha'
+      #     {"tree": ${DIST_TREE_ENTRIES}}
+      #     EOF
+      #     )
+
+      #     # Create root tree via API
+      #     echo "Creating root tree..."
+      #     ROOT_TREE=$(gh api \
+      #       --method POST \
+      #       -H "Accept: application/vnd.github+json" \
+      #       -H "X-GitHub-Api-Version: 2022-11-28" \
+      #       "/repos/${GITHUB_REPOSITORY}/git/trees" \
+      #       --input - <<EOF | jq -r '.sha'
+      #     {"tree": [
+      #       {"path": "LICENSE", "mode": "100644", "type": "blob", "sha": "${LICENSE_BLOB}"},
+      #       {"path": "README.md", "mode": "100644", "type": "blob", "sha": "${README_BLOB}"},
+      #       {"path": "action.yml", "mode": "100644", "type": "blob", "sha": "${ACTION_BLOB}"},
+      #       {"path": "dist", "mode": "040000", "type": "tree", "sha": "${DIST_TREE}"}
+      #     ]}
+      #     EOF
+      #     )
+
+      #     # Create commit via API (orphan commit, no parents)
+      #     echo "Creating commit..."
+      #     COMMIT_SHA=$(gh api \
+      #       --method POST \
+      #       -H "Accept: application/vnd.github+json" \
+      #       -H "X-GitHub-Api-Version: 2022-11-28" \
+      #       "/repos/${GITHUB_REPOSITORY}/git/commits" \
+      #       -f message="chore(release): ${RELEASE_TAG}" \
+      #       -f tree="${ROOT_TREE}" \
+      #       --jq '.sha')
+
+      #     # Create tag via API for verified signature
+      #     echo "Creating tag..."
+      #     TAG_SHA=$(gh api \
+      #       --method POST \
+      #       -H "Accept: application/vnd.github+json" \
+      #       -H "X-GitHub-Api-Version: 2022-11-28" \
+      #       "/repos/${GITHUB_REPOSITORY}/git/tags" \
+      #       -f tag="${RELEASE_TAG}" \
+      #       -f message="Release ${RELEASE_TAG}" \
+      #       -f object="${COMMIT_SHA}" \
+      #       -f type="commit" \
+      #       --jq '.sha')
+
+      #     # Create the ref pointing to the tag
+      #     echo "Creating tag ref..."
+      #     gh api \
+      #       --method POST \
+      #       -H "Accept: application/vnd.github+json" \
+      #       -H "X-GitHub-Api-Version: 2022-11-28" \
+      #       "/repos/${GITHUB_REPOSITORY}/git/refs" \
+      #       -f ref="refs/tags/${RELEASE_TAG}" \
+      #       -f sha="${TAG_SHA}"
+
+      #     echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+      #     echo "Created tag ${RELEASE_TAG} pointing to commit ${COMMIT_SHA}"
+      #   env:
+      #     RELEASE_TAG: ${{ steps.version.outputs.next_version }}
+      #     GH_TOKEN: ${{ github.token }}
+      #     GITHUB_REPOSITORY: ${{ github.repository }}
+
+      - name: Generate release details
+        id: release-details
+        uses: orhun/git-cliff-action@d77b37db2e3f7398432d34b72a12aa3e2ba87e51 # v4.6.0
         with:
-          token: ${{ github.token }}
-          noVersionBumpBehavior: patch
-          noNewCommitBehavior: current
-          skipInvalidTags: true
-          tagFilter: v[0-9]+\.[0-9]+\.[0-9]+$
-
-      - name: Determine prerelease version
-        id: version
-        run: |
-          NEXT_VERSION="${SEMVER_NEXT#v}"
-          PRERELEASE_VERSION="${NEXT_VERSION}"
-          PRERELEASE_TAG="v${PRERELEASE_VERSION}"
-          echo "next_version=${PRERELEASE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "Prerelease version: ${PRERELEASE_TAG}"
-        env:
-          SEMVER_NEXT: ${{ steps.semver.outputs.next }}
-
-      - name: Get bot details
-        id: bot-details
-        uses: raven-actions/bot-details@ee8966a9ff6e7e42cbfc4a56b4ddb60a9d1b40a6 # v1.2.0
-
-      - name: Prepare release tree and create tag
-        id: prepare_release
-        run: |
-          # Delete existing tag/release if it exists (for draft prereleases)
-          if git rev-parse "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Tag $RELEASE_TAG already exists, deleting it..."
-            gh release delete "$RELEASE_TAG" --yes || true
-            gh api --method DELETE "/repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}" || true
-            git tag -d "$RELEASE_TAG" || true
-          fi
-
-          # Function to create blob via GitHub API using file input
-          create_blob() {
-            local file="$1"
-            local tmpfile
-            tmpfile=$(mktemp)
-            # Create JSON payload with base64 content
-            printf '{"content":"%s","encoding":"base64"}' "$(base64 -w 0 "$file")" > "$tmpfile"
-            gh api \
-              --method POST \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "/repos/${GITHUB_REPOSITORY}/git/blobs" \
-              --input "$tmpfile" \
-              --jq '.sha'
-            rm -f "$tmpfile"
-          }
-
-          # Create blobs for required files
-          echo "Creating blobs..."
-          LICENSE_BLOB=$(create_blob "LICENSE")
-          README_BLOB=$(create_blob "README.md")
-          ACTION_BLOB=$(create_blob "action.yml")
-
-          # Build tree entries for dist files
-          DIST_TREE_ENTRIES="["
-          first=true
-          for file in dist/*; do
-            if [ -f "$file" ]; then
-              filename=$(basename "$file")
-              blob=$(create_blob "$file")
-              if [ "$first" = true ]; then
-                first=false
-              else
-                DIST_TREE_ENTRIES="${DIST_TREE_ENTRIES},"
-              fi
-              DIST_TREE_ENTRIES="${DIST_TREE_ENTRIES}{\"path\":\"${filename}\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"${blob}\"}"
-            fi
-          done
-          DIST_TREE_ENTRIES="${DIST_TREE_ENTRIES}]"
-
-          # Create dist tree via API
-          echo "Creating dist tree..."
-          DIST_TREE=$(gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "/repos/${GITHUB_REPOSITORY}/git/trees" \
-            --input - <<EOF | jq -r '.sha'
-          {"tree": ${DIST_TREE_ENTRIES}}
-          EOF
-          )
-
-          # Create root tree via API
-          echo "Creating root tree..."
-          ROOT_TREE=$(gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "/repos/${GITHUB_REPOSITORY}/git/trees" \
-            --input - <<EOF | jq -r '.sha'
-          {"tree": [
-            {"path": "LICENSE", "mode": "100644", "type": "blob", "sha": "${LICENSE_BLOB}"},
-            {"path": "README.md", "mode": "100644", "type": "blob", "sha": "${README_BLOB}"},
-            {"path": "action.yml", "mode": "100644", "type": "blob", "sha": "${ACTION_BLOB}"},
-            {"path": "dist", "mode": "040000", "type": "tree", "sha": "${DIST_TREE}"}
-          ]}
-          EOF
-          )
-
-          # Create commit via API (orphan commit, no parents)
-          echo "Creating commit..."
-          COMMIT_SHA=$(gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "/repos/${GITHUB_REPOSITORY}/git/commits" \
-            -f message="chore(release): ${RELEASE_TAG}" \
-            -f tree="${ROOT_TREE}" \
-            --jq '.sha')
-
-          # Create tag via API for verified signature
-          echo "Creating tag..."
-          TAG_SHA=$(gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "/repos/${GITHUB_REPOSITORY}/git/tags" \
-            -f tag="${RELEASE_TAG}" \
-            -f message="Release ${RELEASE_TAG}" \
-            -f object="${COMMIT_SHA}" \
-            -f type="commit" \
-            --jq '.sha')
-
-          # Create the ref pointing to the tag
-          echo "Creating tag ref..."
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "/repos/${GITHUB_REPOSITORY}/git/refs" \
-            -f ref="refs/tags/${RELEASE_TAG}" \
-            -f sha="${TAG_SHA}"
-
-          echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "Created tag ${RELEASE_TAG} pointing to commit ${COMMIT_SHA}"
-        env:
-          RELEASE_TAG: ${{ steps.version.outputs.next_version }}
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-
-      - name: Generate changelog
-        id: changelog
-        uses: requarks/changelog-action@b78a3354a01f4a1affb484b9264b506a815c46b1 # v1.10.3
-        with:
-          token: ${{ github.token }}
-          fromTag: ${{ steps.version.outputs.next_version }}
-          toTag: ${{ steps.semver.outputs.current }}
-          writeToFile: false
-          excludeTypes: build,docs,other,style,chore,ci
-          includeInvalidCommits: true
-          reverseOrder: true
+          config: .github/cliff.toml
+          args: --unreleased --bump --strip header
 
       - name: Create Draft Prerelease
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
-          tag_name: ${{ steps.version.outputs.next_version }}
-          name: ${{ steps.version.outputs.next_version }}
-          body: ${{ steps.changelog.outputs.changes }}
+          tag_name: ${{ steps.release-details.outputs.version }}
+          name: ${{ steps.release-details.outputs.version }}
+          body: ${{ steps.release-details.outputs.content }}
           draft: true
           prerelease: true
+          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ github.token }}
