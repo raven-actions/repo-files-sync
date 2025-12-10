@@ -80,7 +80,7 @@ jobs:
         id: version
         run: |
           NEXT_VERSION="${SEMVER_NEXT#v}"
-          PRERELEASE_VERSION="${NEXT_VERSION}-rc.0"
+          PRERELEASE_VERSION="${NEXT_VERSION}"
           PRERELEASE_TAG="v${PRERELEASE_VERSION}"
           echo "next_version=${PRERELEASE_TAG}" >> "$GITHUB_OUTPUT"
           echo "Prerelease version: ${PRERELEASE_TAG}"
