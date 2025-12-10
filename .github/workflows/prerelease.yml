@@ -79,110 +79,20 @@ jobs:
 
       - name: Prepare Release Branch
         id: release-branch
-        run: |
-          set -euo pipefail
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const { default: script } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/release-branch.mjs`)
 
-          # Validate release tag
-          if [[ -z "${RELEASE_TAG}" ]]; then
-            echo "::error::Release tag is empty"
-            exit 1
-          fi
+            const releaseBranch = await script({
+              github,
+              context,
+              core
+            })
 
-          # Validate required files exist
-          for file in LICENSE README.md action.yml .github/workflows/publish.yml; do
-            if [[ ! -f "$file" ]]; then
-              echo "::error::Required file missing: $file"
-              exit 1
-            fi
-          done
-
-          # Validate dist directory has files
-          if [[ ! -d "dist" ]] || [[ -z "$(ls -A dist 2>/dev/null)" ]]; then
-            echo "::error::dist directory is empty or missing"
-            exit 1
-          fi
-
-          RELEASE_BRANCH="release/${RELEASE_TAG}"
-
-          # Delete branch if it exists (remotely)
-          gh api --method DELETE "/repos/${GITHUB_REPOSITORY}/git/refs/heads/${RELEASE_BRANCH}" 2>/dev/null || true
-
-          # Helper: GitHub API call with standard headers
-          gh_api() {
-            gh api \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "$@"
-          }
-
-          # Helper: Create blob from file
-          create_blob() {
-            local tmpfile
-            tmpfile=$(mktemp)
-            printf '{"content":"%s","encoding":"base64"}' "$(base64 -w 0 "$1")" > "$tmpfile"
-            gh_api --method POST "/repos/${GITHUB_REPOSITORY}/git/blobs" --input "$tmpfile" --jq '.sha'
-            rm -f "$tmpfile"
-          }
-
-          # Helper: Create tree from JSON entries
-          create_tree() {
-            gh_api --method POST "/repos/${GITHUB_REPOSITORY}/git/trees" --input - <<< "$1" | jq -r '.sha'
-          }
-
-          # Get the current HEAD commit SHA from main branch (parent for new commit)
-          echo "Getting main branch HEAD..."
-          PARENT_SHA=$(gh_api "/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')
-
-          # Create blobs for required files
-          echo "Creating blobs..."
-          LICENSE_BLOB=$(create_blob "LICENSE")
-          README_BLOB=$(create_blob "README.md")
-          ACTION_BLOB=$(create_blob "action.yml")
-          PUBLISH_BLOB=$(create_blob ".github/workflows/publish.yml")
-
-          # Build dist tree entries
-          DIST_ENTRIES=""
-          for file in dist/*; do
-            [[ -f "$file" ]] || continue
-            filename=$(basename "$file")
-            blob=$(create_blob "$file")
-            [[ -n "$DIST_ENTRIES" ]] && DIST_ENTRIES+=","
-            DIST_ENTRIES+="{\"path\":\"${filename}\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"${blob}\"}"
-          done
-
-          # Create all trees
-          echo "Creating trees..."
-          DIST_TREE=$(create_tree "{\"tree\":[${DIST_ENTRIES}]}")
-          WORKFLOWS_TREE=$(create_tree "{\"tree\":[{\"path\":\"publish.yml\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"${PUBLISH_BLOB}\"}]}")
-          GITHUB_TREE=$(create_tree "{\"tree\":[{\"path\":\"workflows\",\"mode\":\"040000\",\"type\":\"tree\",\"sha\":\"${WORKFLOWS_TREE}\"}]}")
-          ROOT_TREE=$(create_tree "{\"tree\":[
-            {\"path\":\"LICENSE\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"${LICENSE_BLOB}\"},
-            {\"path\":\"README.md\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"${README_BLOB}\"},
-            {\"path\":\"action.yml\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"${ACTION_BLOB}\"},
-            {\"path\":\"dist\",\"mode\":\"040000\",\"type\":\"tree\",\"sha\":\"${DIST_TREE}\"},
-            {\"path\":\".github\",\"mode\":\"040000\",\"type\":\"tree\",\"sha\":\"${GITHUB_TREE}\"}
-          ]}")
-
-          # Create commit with parent from main (will be verified)
-          echo "Creating verified commit..."
-          COMMIT_SHA=$(gh_api --method POST "/repos/${GITHUB_REPOSITORY}/git/commits" \
-            -f message="chore(release): ${RELEASE_TAG}" \
-            -f tree="${ROOT_TREE}" \
-            -f "parents[]=${PARENT_SHA}" \
-            --jq '.sha')
-
-          # Create branch ref pointing to the new commit
-          echo "Creating release branch..."
-          gh_api --method POST "/repos/${GITHUB_REPOSITORY}/git/refs" \
-            -f ref="refs/heads/${RELEASE_BRANCH}" \
-            -f sha="${COMMIT_SHA}"
-
-          echo "name=${RELEASE_BRANCH}" >> "$GITHUB_OUTPUT"
-          echo "Created release branch ${RELEASE_BRANCH} from main with verified commit ${COMMIT_SHA}"
+            core.setOutput('name', releaseBranch)
         env:
-          RELEASE_TAG: ${{ steps.release-details.outputs.version }}
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
+          INPUT_RELEASE_TAG: ${{ steps.release-details.outputs.version }}
 
       - name: Create Draft Prerelease
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
