@@ -42,21 +42,21 @@ jobs:
         run: pnpm build
 
       - name: Get latest release tag
-        id: get_latest_release
+        id: get-latest-release
         run: |
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "latest_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
           if [ -z "$LATEST_TAG" ]; then
             echo "No previous release found, using initial commit"
             LATEST_TAG=$(git rev-list --max-parents=0 HEAD)
           fi
-          echo "compare_base=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "compare_base=$LATEST_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Analyze commits and determine version bump
-        id: version_bump
+        id: version-bump
         run: |
           # Get commits since last release
-          COMMITS=$(git log ${COMPARE_BASE}..HEAD --pretty=format:"%s" 2>/dev/null || git log --pretty=format:"%s")
+          COMMITS=$(git log "${COMPARE_BASE}"..HEAD --pretty=format:"%s" 2>/dev/null || git log --pretty=format:"%s")
 
           # Determine version bump based on conventional commits
           BUMP="patch"
@@ -75,19 +75,19 @@ jobs:
             fi
           done <<< "$COMMITS"
 
-          echo "bump=$BUMP" >> $GITHUB_OUTPUT
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
 
           # Calculate next version
           if [ -z "$LATEST_TAG" ]; then
             NEXT_VERSION="0.1.0-rc.0"
           else
             # Remove 'v' prefix if present
-            VERSION=${LATEST_TAG#v}
+            VERSION="${LATEST_TAG#v}"
 
             # Parse version components
             IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
             # Remove any pre-release suffix from PATCH
-            PATCH=${PATCH%%-*}
+            PATCH="${PATCH%%-*}"
 
             case $BUMP in
               major)
@@ -107,12 +107,16 @@ jobs:
             NEXT_VERSION="${MAJOR}.${MINOR}.${PATCH}-rc.${RUN_NUMBER}"
           fi
 
-          echo "next_version=v${NEXT_VERSION}" >> $GITHUB_OUTPUT
+          echo "next_version=v${NEXT_VERSION}" >> "$GITHUB_OUTPUT"
           echo "Determined bump: $BUMP, next version: v${NEXT_VERSION}"
         env:
-          COMPARE_BASE: ${{ steps.get_latest_release.outputs.compare_base }}
-          LATEST_TAG: ${{ steps.get_latest_release.outputs.latest_tag }}
+          COMPARE_BASE: ${{ steps.get-latest-release.outputs.compare_base }}
+          LATEST_TAG: ${{ steps.get-latest-release.outputs.latest_tag }}
           RUN_NUMBER: ${{ github.run_number }}
+
+      - name: Get bot details
+        id: bot-details
+        uses: raven-actions/bot-details@ee8966a9ff6e7e42cbfc4a56b4ddb60a9d1b40a6 # v1.2.0
 
       - name: Prepare release branch with worktree
         id: prepare_release
@@ -139,8 +143,8 @@ jobs:
 
           # Add and commit
           git add -A
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "$BOT_NAME"
+          git config user.email "$BOT_EMAIL"
           git commit -m "chore(release): ${RELEASE_TAG}"
 
           # Create the tag
@@ -154,15 +158,17 @@ jobs:
           # Cleanup worktree
           git worktree remove "$WORKTREE_DIR" --force
 
-          echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
         env:
-          RELEASE_TAG: ${{ steps.version_bump.outputs.next_version }}
+          RELEASE_TAG: ${{ steps.version-bump.outputs.next_version }}
+          BOT_NAME: ${{ steps.bot-details.outputs.name }}
+          BOT_EMAIL: ${{ steps.bot-details.outputs.email }}
 
       - name: Create Draft Prerelease
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
-          tag_name: ${{ steps.version_bump.outputs.next_version }}
-          name: ${{ steps.version_bump.outputs.next_version }}
+          tag_name: ${{ steps.version-bump.outputs.next_version }}
+          name: ${{ steps.version-bump.outputs.next_version }}
           # body_path: release_notes.md
           draft: true
           prerelease: true
