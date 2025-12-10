@@ -7,6 +7,14 @@ import path from 'node:path'
  * Creates a release branch with only the required files for publishing.
  * This script is designed to be used with actions/github-script.
  *
+ * Inputs (via environment variables INPUT_*):
+ * - TAG (required): Release tag/version (e.g., "v1.0.0")
+ * - FILES (required): Multiline list of files/directories to include
+ * - BRANCH_PREFIX (optional): Branch prefix, default: "release"
+ * - COMMIT_MESSAGE (optional): Commit message template, use {tag} placeholder, default: "chore(release): {tag}"
+ * - BASE_BRANCH (optional): Base branch to create release from, default: "main"
+ * - DELETE_EXISTING (optional): Delete existing branch if exists, default: "true"
+ *
  * @param {Object} params
  * @param {import('@actions/github').GitHub} params.github - GitHub API client
  * @param {import('@actions/github').Context} params.context - GitHub Actions context
@@ -15,11 +23,21 @@ import path from 'node:path'
 export default async function main({ github, context, core }) {
   const { owner, repo } = context.repo
 
-  // Get inputs
+  // Required inputs
   const releaseTag = core.getInput('TAG', { required: true })
   const requiredFiles = core.getMultilineInput('FILES', { required: true })
 
-  const releaseBranch = `release/${releaseTag}`
+  // Optional inputs with defaults
+  const branchPrefix = core.getInput('BRANCH_PREFIX') || 'release'
+  const commitMessageTemplate = core.getInput('COMMIT_MESSAGE') || 'chore(release): {tag}'
+  const baseBranch = core.getInput('BASE_BRANCH') || 'main'
+
+  // getBooleanInput throws if value is not a valid YAML boolean, so we need to check if input exists first
+  const deleteExistingInput = core.getInput('DELETE_EXISTING')
+  const deleteExisting = deleteExistingInput ? core.getBooleanInput('DELETE_EXISTING') : true
+
+  const releaseBranch = `${branchPrefix}/${releaseTag}`
+  const commitMessage = commitMessageTemplate.replace(/{tag}/g, releaseTag)
 
   // Validate required files exist
   for (const file of requiredFiles) {
@@ -29,29 +47,31 @@ export default async function main({ github, context, core }) {
   }
 
   // Delete branch if it exists (remotely)
-  core.info(`Deleting existing branch ${releaseBranch} if exists...`)
-  try {
-    await github.rest.git.deleteRef({
-      owner,
-      repo,
-      ref: `heads/${releaseBranch}`
-    })
-    core.info(`Deleted existing branch ${releaseBranch}`)
-  } catch (error) {
-    const err = /** @type {{ status?: number }} */ (error)
-    if (err.status !== 422 && err.status !== 404) {
-      throw error
+  if (deleteExisting) {
+    core.info(`Deleting existing branch ${releaseBranch} if exists...`)
+    try {
+      await github.rest.git.deleteRef({
+        owner,
+        repo,
+        ref: `heads/${releaseBranch}`
+      })
+      core.info(`Deleted existing branch ${releaseBranch}`)
+    } catch (error) {
+      const err = /** @type {{ status?: number }} */ (error)
+      if (err.status !== 422 && err.status !== 404) {
+        throw error
+      }
     }
   }
 
-  // Get main branch HEAD SHA (parent for new commit)
-  core.info('Getting main branch HEAD...')
-  const { data: mainRef } = await github.rest.git.getRef({
+  // Get base branch HEAD SHA (parent for new commit)
+  core.info(`Getting ${baseBranch} branch HEAD...`)
+  const { data: baseRef } = await github.rest.git.getRef({
     owner,
     repo,
-    ref: 'heads/main'
+    ref: `heads/${baseBranch}`
   })
-  const parentSha = mainRef.object.sha
+  const parentSha = baseRef.object.sha
 
   /**
    * Create a blob from file content
@@ -202,12 +222,12 @@ export default async function main({ github, context, core }) {
   core.info('Creating trees...')
   const rootTreeSha = await buildTreeFromFiles(fileBlobs)
 
-  // Create commit with parent from main (will be verified)
+  // Create commit with parent from base branch (will be verified)
   core.info('Creating verified commit...')
   const { data: commit } = await github.rest.git.createCommit({
     owner,
     repo,
-    message: `chore(release): ${releaseTag}`,
+    message: commitMessage,
     tree: rootTreeSha,
     parents: [parentSha]
   })
@@ -221,10 +241,11 @@ export default async function main({ github, context, core }) {
     sha: commit.sha
   })
 
-  core.info(`Created release branch ${releaseBranch} from main with verified commit ${commit.sha}`)
+  core.info(`Created release branch ${releaseBranch} from ${baseBranch} with verified commit ${commit.sha}`)
 
   // Set outputs
   core.setOutput('name', releaseBranch)
+  core.setOutput('sha', commit.sha)
 
   return releaseBranch
 }
