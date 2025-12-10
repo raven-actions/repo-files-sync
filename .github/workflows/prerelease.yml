@@ -75,23 +75,36 @@ jobs:
           noNewCommitBehavior: current
           skipInvalidTags: true
 
-      # - name: Determine prerelease version
-      #   id: version
-      #   run: |
-      #     NEXT_VERSION="${SEMVER_NEXT#v}"
-      #     PRERELEASE_VERSION="${NEXT_VERSION}-rc.${RUN_NUMBER}"
-      #     echo "next_version=v${PRERELEASE_VERSION}" >> "$GITHUB_OUTPUT"
-      #     echo "Prerelease version: v${PRERELEASE_VERSION}"
-      #   env:
-      #     SEMVER_NEXT: ${{ steps.semver.outputs.next }}
-      #     RUN_NUMBER: ${{ github.run_number }}
+      - name: Get bot details
+        id: bot-details
+        uses: raven-actions/bot-details@ee8966a9ff6e7e42cbfc4a56b4ddb60a9d1b40a6 # v1.2.0
+
+      - name: Determine prerelease version
+        id: version
+        run: |
+          NEXT_VERSION="${SEMVER_NEXT#v}"
+          PRERELEASE_VERSION="${NEXT_VERSION}-rc.${RUN_NUMBER}"
+          echo "next_version=v${PRERELEASE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Prerelease version: v${PRERELEASE_VERSION}"
+          # create prerelease tag
+
+
+          git config user.name "$BOT_NAME"
+          git config user.email "$BOT_EMAIL"
+          git tag -a "v${PRERELEASE_VERSION}" -m "Prerelease v${PRERELEASE_VERSION}"
+          git push origin "v${PRERELEASE_VERSION}"
+        env:
+          SEMVER_NEXT: ${{ steps.semver.outputs.next }}
+          RUN_NUMBER: ${{ github.run_number }}
+          BOT_NAME: ${{ steps.bot-details.outputs.name }}
+          BOT_EMAIL: ${{ steps.bot-details.outputs.email }}
 
       - name: Generate changelog
         id: changelog
         uses: requarks/changelog-action@b78a3354a01f4a1affb484b9264b506a815c46b1 # v1.10.3
         with:
           token: ${{ github.token }}
-          fromTag: ${{ steps.semver.outputs.next}}
+          fromTag: ${{ steps.version.outputs.next_version }}
           toTag: ${{ steps.semver.outputs.current }}
           writeToFile: false
           excludeTypes: build,docs,other,style,chore,ci
