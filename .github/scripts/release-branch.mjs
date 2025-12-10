@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 /**
- * Creates a release branch with only the required files for publishing.
+ * Creates a branch with only the required files for publishing.
  * This script is designed to be used with actions/github-script.
  *
  * Inputs (via environment variables INPUT_*):
@@ -24,7 +24,7 @@ export default async function main({ github, context, core }) {
   const { owner, repo } = context.repo
 
   // Required inputs
-  const releaseTag = core.getInput('TAG', { required: true })
+  const tag = core.getInput('TAG', { required: true })
   const requiredFiles = core.getMultilineInput('FILES', { required: true })
 
   // Optional inputs with defaults
@@ -36,8 +36,8 @@ export default async function main({ github, context, core }) {
   const deleteExistingInput = core.getInput('DELETE_EXISTING')
   const deleteExisting = deleteExistingInput ? core.getBooleanInput('DELETE_EXISTING') : true
 
-  const releaseBranch = `${branchPrefix}/${releaseTag}`
-  const commitMessage = commitMessageTemplate.replace(/{tag}/g, releaseTag)
+  const branch = `${branchPrefix}/${tag}`
+  const commitMessage = commitMessageTemplate.replace(/{tag}/g, tag)
 
   // Validate required files exist
   for (const file of requiredFiles) {
@@ -48,14 +48,14 @@ export default async function main({ github, context, core }) {
 
   // Delete branch if it exists (remotely)
   if (deleteExisting) {
-    core.info(`Deleting existing branch ${releaseBranch} if exists...`)
+    core.info(`Deleting existing branch ${branch} if exists...`)
     try {
       await github.rest.git.deleteRef({
         owner,
         repo,
-        ref: `heads/${releaseBranch}`
+        ref: `heads/${branch}`
       })
-      core.info(`Deleted existing branch ${releaseBranch}`)
+      core.info(`Deleted existing branch ${branch}`)
     } catch (error) {
       const err = /** @type {{ status?: number }} */ (error)
       if (err.status !== 422 && err.status !== 404) {
@@ -233,19 +233,19 @@ export default async function main({ github, context, core }) {
   })
 
   // Create branch ref pointing to the new commit
-  core.info('Creating release branch...')
+  core.info('Creating branch...')
   await github.rest.git.createRef({
     owner,
     repo,
-    ref: `refs/heads/${releaseBranch}`,
+    ref: `refs/heads/${branch}`,
     sha: commit.sha
   })
 
-  core.info(`Created release branch ${releaseBranch} from ${baseBranch} with verified commit ${commit.sha}`)
+  core.info(`Created branch ${branch} from ${baseBranch} with verified commit ${commit.sha}`)
 
   // Set outputs
-  core.setOutput('name', releaseBranch)
+  core.setOutput('name', branch)
   core.setOutput('sha', commit.sha)
 
-  return releaseBranch
+  return branch
 }
