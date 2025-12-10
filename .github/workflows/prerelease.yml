@@ -87,7 +87,6 @@ jobs:
         env:
           INPUT_TAG: ${{ steps.release-details.outputs.version }}
           INPUT_BRANCH_PREFIX: prerelease
-          INPUT_COMMIT_MESSAGE: "chore(prerelease): {tag}"
           INPUT_FILES: |
             LICENSE
             README.md
