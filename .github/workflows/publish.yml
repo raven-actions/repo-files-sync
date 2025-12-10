@@ -31,3 +31,43 @@ jobs:
         uses: actions/publish-action@23f4c6f12633a2da8f44938b71fde9afec138fb4 # v0.4.0
         with:
           source-tag: ${{ github.event.release.tag_name }}
+
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Get Release Branch
+        id: release-branch
+        run: |
+          RELEASE_BRANCH="release/${RELEASE_TAG}"
+          echo "name=${RELEASE_BRANCH}" >> "$GITHUB_OUTPUT"
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          ref: ${{ steps.release-branch.outputs.name }}
+
+      - name: Bot Details
+        id: bot-details
+        uses: raven-actions/bot-details@ee8966a9ff6e7e42cbfc4a56b4ddb60a9d1b40a6 # v1.2.0
+        with:
+          set-env: false
+
+      - name: Remove Release Branch
+        run: |
+          git config --global user.name "${BOT_NAME}"
+          git config --global user.email "${BOT_EMAIL}"
+
+          # Detach to avoid worktree conflicts, then force-delete branch (tag stays)
+          git checkout --detach "${RELEASE_TAG}" 2>/dev/null || git checkout --detach
+
+          git branch -D "${RELEASE_BRANCH}" 2>/dev/null || true
+          git push origin --delete "${RELEASE_BRANCH}" 2>/dev/null || true
+        env:
+          RELEASE_BRANCH: ${{ steps.release-branch.outputs.name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          BOT_NAME: ${{ steps.bot-details.outputs.name }}
+          BOT_EMAIL: ${{ steps.bot-details.outputs.email }}
