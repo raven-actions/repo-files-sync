@@ -74,6 +74,8 @@ jobs:
           branch: main
           noVersionBumpBehavior: patch
           noNewCommitBehavior: current
+          skipInvalidTags: true
+          tagFilter: "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
 
       - name: Determine prerelease version
         id: version
