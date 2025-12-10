@@ -99,26 +99,35 @@ jobs:
           fi
 
           # Create a tree with only the required files
-          # First, get the tree entries for files we want to include
           LICENSE_BLOB=$(git hash-object -w LICENSE)
           README_BLOB=$(git hash-object -w README.md)
           ACTION_BLOB=$(git hash-object -w action.yml)
 
           # Create blobs for dist files and build the dist tree
-          DIST_TREE_ENTRIES=""
+          DIST_TREE_FILE=$(mktemp)
           for file in dist/*; do
             if [ -f "$file" ]; then
               filename=$(basename "$file")
               blob=$(git hash-object -w "$file")
-              DIST_TREE_ENTRIES="${DIST_TREE_ENTRIES}100644 blob ${blob}\t${filename}\n"
+              printf '100644 blob %s\t%s\n' "$blob" "$filename" >> "$DIST_TREE_FILE"
             fi
           done
 
           # Create dist tree
-          DIST_TREE=$(echo -e "$DIST_TREE_ENTRIES" | git mktree)
+          DIST_TREE=$(git mktree < "$DIST_TREE_FILE")
+          rm "$DIST_TREE_FILE"
 
           # Create the root tree with LICENSE, README.md, action.yml, and dist/
-          ROOT_TREE=$(echo -e "100644 blob ${LICENSE_BLOB}\tLICENSE\n100644 blob ${README_BLOB}\tREADME.md\n100644 blob ${ACTION_BLOB}\taction.yml\n040000 tree ${DIST_TREE}\tdist" | git mktree)
+          ROOT_TREE_FILE=$(mktemp)
+          {
+            printf '100644 blob %s\t%s\n' "$LICENSE_BLOB" "LICENSE"
+            printf '100644 blob %s\t%s\n' "$README_BLOB" "README.md"
+            printf '100644 blob %s\t%s\n' "$ACTION_BLOB" "action.yml"
+            printf '040000 tree %s\t%s\n' "$DIST_TREE" "dist"
+          } >> "$ROOT_TREE_FILE"
+
+          ROOT_TREE=$(git mktree < "$ROOT_TREE_FILE")
+          rm "$ROOT_TREE_FILE"
 
           # Create a commit for this tree (orphan commit, no parent)
           COMMIT_SHA=$(git commit-tree "$ROOT_TREE" -m "chore(release): ${RELEASE_TAG}")
