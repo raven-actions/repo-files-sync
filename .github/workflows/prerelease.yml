@@ -85,7 +85,7 @@ jobs:
           name: dist
           path: dist/
 
-      - name: Commit and Push to Release Branch
+      - name: Prepare Release Branch
         id: release-branch
         run: |
           git config user.name "github-actions[bot]"
@@ -119,3 +119,13 @@ jobs:
           target_commitish: ${{ steps.release-branch.outputs.name }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Remove Release Branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git branch -D "${RELEASE_BRANCH}"
+          git push origin --delete "${RELEASE_BRANCH}"
+        env:
+          RELEASE_BRANCH: ${{ steps.release-branch.outputs.name }}
