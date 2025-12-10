@@ -94,10 +94,6 @@ jobs:
       - name: Prepare release tree and create tag
         id: prepare_release
         run: |
-          # Configure git identity for commit-tree
-          git config user.name "$BOT_NAME"
-          git config user.email "$BOT_EMAIL"
-
           # Delete existing tag/release if it exists (for draft prereleases)
           if git rev-parse "$RELEASE_TAG" >/dev/null 2>&1; then
             echo "Tag $RELEASE_TAG already exists, deleting it..."
@@ -106,41 +102,86 @@ jobs:
             git tag -d "$RELEASE_TAG" || true
           fi
 
-          # Create a tree with only the required files
-          LICENSE_BLOB=$(git hash-object -w LICENSE)
-          README_BLOB=$(git hash-object -w README.md)
-          ACTION_BLOB=$(git hash-object -w action.yml)
+          # Function to create blob via GitHub API
+          create_blob() {
+            local file="$1"
+            local content
+            content=$(base64 -w 0 "$file")
+            gh api \
+              --method POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/${GITHUB_REPOSITORY}/git/blobs" \
+              -f content="$content" \
+              -f encoding="base64" \
+              --jq '.sha'
+          }
 
-          # Create blobs for dist files and build the dist tree
-          DIST_TREE_FILE=$(mktemp)
+          # Create blobs for required files
+          echo "Creating blobs..."
+          LICENSE_BLOB=$(create_blob "LICENSE")
+          README_BLOB=$(create_blob "README.md")
+          ACTION_BLOB=$(create_blob "action.yml")
+
+          # Build tree entries for dist files
+          DIST_TREE_ENTRIES="["
+          first=true
           for file in dist/*; do
             if [ -f "$file" ]; then
               filename=$(basename "$file")
-              blob=$(git hash-object -w "$file")
-              printf '100644 blob %s\t%s\n' "$blob" "$filename" >> "$DIST_TREE_FILE"
+              blob=$(create_blob "$file")
+              if [ "$first" = true ]; then
+                first=false
+              else
+                DIST_TREE_ENTRIES="${DIST_TREE_ENTRIES},"
+              fi
+              DIST_TREE_ENTRIES="${DIST_TREE_ENTRIES}{\"path\":\"${filename}\",\"mode\":\"100644\",\"type\":\"blob\",\"sha\":\"${blob}\"}"
             fi
           done
+          DIST_TREE_ENTRIES="${DIST_TREE_ENTRIES}]"
 
-          # Create dist tree
-          DIST_TREE=$(git mktree < "$DIST_TREE_FILE")
-          rm "$DIST_TREE_FILE"
+          # Create dist tree via API
+          echo "Creating dist tree..."
+          DIST_TREE=$(gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${GITHUB_REPOSITORY}/git/trees" \
+            --input - <<EOF | jq -r '.sha'
+          {"tree": ${DIST_TREE_ENTRIES}}
+          EOF
+          )
 
-          # Create the root tree with LICENSE, README.md, action.yml, and dist/
-          ROOT_TREE_FILE=$(mktemp)
-          {
-            printf '100644 blob %s\t%s\n' "$LICENSE_BLOB" "LICENSE"
-            printf '100644 blob %s\t%s\n' "$README_BLOB" "README.md"
-            printf '100644 blob %s\t%s\n' "$ACTION_BLOB" "action.yml"
-            printf '040000 tree %s\t%s\n' "$DIST_TREE" "dist"
-          } >> "$ROOT_TREE_FILE"
+          # Create root tree via API
+          echo "Creating root tree..."
+          ROOT_TREE=$(gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${GITHUB_REPOSITORY}/git/trees" \
+            --input - <<EOF | jq -r '.sha'
+          {"tree": [
+            {"path": "LICENSE", "mode": "100644", "type": "blob", "sha": "${LICENSE_BLOB}"},
+            {"path": "README.md", "mode": "100644", "type": "blob", "sha": "${README_BLOB}"},
+            {"path": "action.yml", "mode": "100644", "type": "blob", "sha": "${ACTION_BLOB}"},
+            {"path": "dist", "mode": "040000", "type": "tree", "sha": "${DIST_TREE}"}
+          ]}
+          EOF
+          )
 
-          ROOT_TREE=$(git mktree < "$ROOT_TREE_FILE")
-          rm "$ROOT_TREE_FILE"
+          # Create commit via API (orphan commit, no parents)
+          echo "Creating commit..."
+          COMMIT_SHA=$(gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${GITHUB_REPOSITORY}/git/commits" \
+            -f message="chore(release): ${RELEASE_TAG}" \
+            -f tree="${ROOT_TREE}" \
+            --jq '.sha')
 
-          # Create a commit for this tree (orphan commit, no parent)
-          COMMIT_SHA=$(git commit-tree "$ROOT_TREE" -m "chore(release): ${RELEASE_TAG}")
-
-          # Create tag using GitHub API for verified signature
+          # Create tag via API for verified signature
+          echo "Creating tag..."
           TAG_SHA=$(gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
@@ -153,6 +194,7 @@ jobs:
             --jq '.sha')
 
           # Create the ref pointing to the tag
+          echo "Creating tag ref..."
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
@@ -162,12 +204,11 @@ jobs:
             -f sha="${TAG_SHA}"
 
           echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Created tag ${RELEASE_TAG} pointing to commit ${COMMIT_SHA}"
         env:
           RELEASE_TAG: ${{ steps.version.outputs.next_version }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          BOT_NAME: ${{ steps.bot-details.outputs.name }}
-          BOT_EMAIL: ${{ steps.bot-details.outputs.email }}
 
       - name: Generate changelog
         id: changelog
