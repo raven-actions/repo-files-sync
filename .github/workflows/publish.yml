@@ -34,12 +34,12 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           GH_TOKEN: ${{ github.token }}
 
-      - name: Remove Release Branch
-        run: |
-          RELEASE_BRANCH="release/${RELEASE_TAG}"
-          gh api --method DELETE "/repos/${GITHUB_REPOSITORY}/git/refs/heads/${RELEASE_BRANCH}" 2>/dev/null || true
-          echo "Deleted release branch ${RELEASE_BRANCH}"
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
+      # - name: Remove Release Branch
+      #   run: |
+      #     RELEASE_BRANCH="release/${RELEASE_TAG}"
+      #     gh api --method DELETE "/repos/${GITHUB_REPOSITORY}/git/refs/heads/${RELEASE_BRANCH}" 2>/dev/null || true
+      #     echo "Deleted release branch ${RELEASE_BRANCH}"
+      #   env:
+      #     RELEASE_TAG: ${{ github.event.release.tag_name }}
+      #     GH_TOKEN: ${{ github.token }}
+      #     GITHUB_REPOSITORY: ${{ github.repository }}
