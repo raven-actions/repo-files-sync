@@ -2,15 +2,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as core from '@actions/core';
 import {
   getInput,
-  getRequiredInput,
   getOptionalInput,
   getBooleanInput,
-  getArrayInput
+  getArrayInput,
+  getDisableableInput,
+  getDisableableArrayInput
 } from '../src/input.js';
 
 // Mock @actions/core
 vi.mock('@actions/core', () => ({
   getInput: vi.fn(),
+  getBooleanInput: vi.fn(),
+  getMultilineInput: vi.fn(),
   debug: vi.fn(),
   info: vi.fn(),
   warning: vi.fn(),
@@ -29,190 +32,14 @@ describe('input.ts', () => {
     vi.resetAllMocks();
   });
 
-  describe('getInput', () => {
-    describe('string type (default)', () => {
-      it('should return string value when provided', () => {
-        vi.mocked(core.getInput).mockReturnValue('test-value');
+  describe('getInput (re-exported from @actions/core)', () => {
+    it('should call core.getInput directly', () => {
+      vi.mocked(core.getInput).mockReturnValue('test-value');
 
-        const result = getInput({ key: 'TEST_KEY' });
+      const result = getInput('TEST_KEY');
 
-        expect(result).toBe('test-value');
-        expect(core.getInput).toHaveBeenCalledWith('TEST_KEY', { required: false });
-      });
-
-      it('should return default value when input is empty', () => {
-        vi.mocked(core.getInput).mockReturnValue('');
-
-        const result = getInput({ key: 'TEST_KEY', default: 'default-value' });
-
-        expect(result).toBe('default-value');
-      });
-
-      it('should return undefined when input is empty and no default', () => {
-        vi.mocked(core.getInput).mockReturnValue('');
-
-        const result = getInput({ key: 'TEST_KEY' });
-
-        expect(result).toBeUndefined();
-      });
-
-      it('should throw error when required input is missing', () => {
-        vi.mocked(core.getInput).mockReturnValue('');
-
-        expect(() => getInput({ key: 'REQUIRED_KEY', required: true })).toThrow(
-          "Input 'REQUIRED_KEY' is required but was not provided"
-        );
-      });
-    });
-
-    describe('boolean type', () => {
-      it.each([
-        ['true', true],
-        ['TRUE', true],
-        ['True', true],
-        ['1', true],
-        ['yes', true],
-        ['YES', true],
-        ['false', false],
-        ['FALSE', false],
-        ['0', false],
-        ['no', false],
-        ['random', false],
-        ['', undefined] // empty returns default
-      ])('should parse "%s" as %s', (input, expected) => {
-        vi.mocked(core.getInput).mockReturnValue(input);
-
-        const result = getInput({ key: 'BOOL_KEY', type: 'boolean', default: undefined });
-
-        if (input === '') {
-          expect(result).toBeUndefined();
-        } else {
-          expect(result).toBe(expected);
-        }
-      });
-
-      it('should return default boolean when input is empty', () => {
-        vi.mocked(core.getInput).mockReturnValue('');
-
-        const result = getInput({ key: 'BOOL_KEY', type: 'boolean', default: true });
-
-        expect(result).toBe(true);
-      });
-    });
-
-    describe('array type', () => {
-      it('should parse comma-separated values', () => {
-        vi.mocked(core.getInput).mockReturnValue('item1, item2, item3');
-
-        const result = getInput({ key: 'ARRAY_KEY', type: 'array' });
-
-        expect(result).toEqual(['item1', 'item2', 'item3']);
-      });
-
-      it('should parse newline-separated values', () => {
-        vi.mocked(core.getInput).mockReturnValue('item1\nitem2\nitem3');
-
-        const result = getInput({ key: 'ARRAY_KEY', type: 'array' });
-
-        expect(result).toEqual(['item1', 'item2', 'item3']);
-      });
-
-      it('should parse mixed comma and newline separated values', () => {
-        vi.mocked(core.getInput).mockReturnValue('item1, item2\nitem3, item4');
-
-        const result = getInput({ key: 'ARRAY_KEY', type: 'array' });
-
-        expect(result).toEqual(['item1', 'item2', 'item3', 'item4']);
-      });
-
-      it('should filter empty items', () => {
-        vi.mocked(core.getInput).mockReturnValue('item1,,item2,  ,item3');
-
-        const result = getInput({ key: 'ARRAY_KEY', type: 'array' });
-
-        expect(result).toEqual(['item1', 'item2', 'item3']);
-      });
-
-      it('should trim whitespace from items', () => {
-        vi.mocked(core.getInput).mockReturnValue('  item1  ,  item2  ');
-
-        const result = getInput({ key: 'ARRAY_KEY', type: 'array' });
-
-        expect(result).toEqual(['item1', 'item2']);
-      });
-
-      it('should return default array when input is empty', () => {
-        vi.mocked(core.getInput).mockReturnValue('');
-
-        const result = getInput({ key: 'ARRAY_KEY', type: 'array', default: ['default1', 'default2'] });
-
-        expect(result).toEqual(['default1', 'default2']);
-      });
-    });
-
-    describe('disableable inputs', () => {
-      it.each([
-        ['false', undefined],
-        ['FALSE', undefined],
-        ['0', undefined],
-        ['no', undefined],
-        ['NO', undefined]
-      ])('should return undefined for disabled value "%s"', (input, expected) => {
-        vi.mocked(core.getInput).mockReturnValue(input);
-
-        const result = getInput({ key: 'DISABLE_KEY', disableable: true, default: 'default' });
-
-        expect(result).toBe(expected);
-      });
-
-      it('should return default value for empty string (not treated as disabled)', () => {
-        // Empty string goes through the "empty/missing input" path, returning default
-        vi.mocked(core.getInput).mockReturnValue('');
-
-        const result = getInput({ key: 'DISABLE_KEY', disableable: true, default: 'default' });
-
-        expect(result).toBe('default');
-      });
-
-      it('should return value when not disabled', () => {
-        vi.mocked(core.getInput).mockReturnValue('actual-value');
-
-        const result = getInput({ key: 'DISABLE_KEY', disableable: true, default: 'default' });
-
-        expect(result).toBe('actual-value');
-      });
-
-      it('should work with array type and disableable', () => {
-        vi.mocked(core.getInput).mockReturnValue('false');
-
-        const result = getInput({
-          key: 'ARRAY_KEY',
-          type: 'array',
-          disableable: true,
-          default: ['default']
-        });
-
-        expect(result).toBeUndefined();
-      });
-    });
-  });
-
-  describe('getRequiredInput', () => {
-    it('should return value when provided', () => {
-      vi.mocked(core.getInput).mockReturnValue('required-value');
-
-      const result = getRequiredInput('REQUIRED_KEY');
-
-      expect(result).toBe('required-value');
-      expect(core.getInput).toHaveBeenCalledWith('REQUIRED_KEY', { required: true });
-    });
-
-    it('should throw error when value is empty', () => {
-      vi.mocked(core.getInput).mockReturnValue('');
-
-      expect(() => getRequiredInput('REQUIRED_KEY')).toThrow(
-        "Input 'REQUIRED_KEY' is required but was not provided"
-      );
+      expect(result).toBe('test-value');
+      expect(core.getInput).toHaveBeenCalledWith('TEST_KEY');
     });
   });
 
@@ -235,53 +62,177 @@ describe('input.ts', () => {
   });
 
   describe('getBooleanInput', () => {
-    it.each([
-      ['true', true],
-      ['TRUE', true],
-      ['1', true],
-      ['yes', true],
-      ['false', false],
-      ['0', false],
-      ['no', false]
-    ])('should parse "%s" as %s', (input, expected) => {
-      vi.mocked(core.getInput).mockReturnValue(input);
-
-      const result = getBooleanInput('BOOL_KEY', false);
-
-      expect(result).toBe(expected);
-    });
-
     it('should return default when input is empty', () => {
       vi.mocked(core.getInput).mockReturnValue('');
 
       expect(getBooleanInput('BOOL_KEY', true)).toBe(true);
       expect(getBooleanInput('BOOL_KEY', false)).toBe(false);
     });
+
+    it('should call core.getBooleanInput when value is provided', () => {
+      vi.mocked(core.getInput).mockReturnValue('true');
+      vi.mocked(core.getBooleanInput).mockReturnValue(true);
+
+      const result = getBooleanInput('BOOL_KEY', false);
+
+      expect(result).toBe(true);
+      expect(core.getBooleanInput).toHaveBeenCalledWith('BOOL_KEY');
+    });
+
+    it('should delegate to core.getBooleanInput for true values', () => {
+      vi.mocked(core.getInput).mockReturnValue('TRUE');
+      vi.mocked(core.getBooleanInput).mockReturnValue(true);
+
+      const result = getBooleanInput('BOOL_KEY', false);
+
+      expect(result).toBe(true);
+    });
+
+    it('should delegate to core.getBooleanInput for false values', () => {
+      vi.mocked(core.getInput).mockReturnValue('false');
+      vi.mocked(core.getBooleanInput).mockReturnValue(false);
+
+      const result = getBooleanInput('BOOL_KEY', true);
+
+      expect(result).toBe(false);
+    });
   });
 
   describe('getArrayInput', () => {
-    it('should parse array correctly', () => {
-      vi.mocked(core.getInput).mockReturnValue('a, b, c');
+    it('should parse comma-separated values', () => {
+      vi.mocked(core.getInput).mockReturnValue('item1, item2, item3');
 
       const result = getArrayInput('ARRAY_KEY');
 
-      expect(result).toEqual(['a', 'b', 'c']);
+      expect(result).toEqual(['item1', 'item2', 'item3']);
     });
 
-    it('should return default array when empty', () => {
-      vi.mocked(core.getInput).mockReturnValue('');
+    it('should parse newline-separated values', () => {
+      vi.mocked(core.getInput).mockReturnValue('item1\nitem2\nitem3');
 
-      const result = getArrayInput('ARRAY_KEY', ['x', 'y']);
+      const result = getArrayInput('ARRAY_KEY');
 
-      expect(result).toEqual(['x', 'y']);
+      expect(result).toEqual(['item1', 'item2', 'item3']);
     });
 
-    it('should return undefined when empty and no default', () => {
+    it('should parse mixed comma and newline separated values', () => {
+      vi.mocked(core.getInput).mockReturnValue('item1, item2\nitem3, item4');
+
+      const result = getArrayInput('ARRAY_KEY');
+
+      expect(result).toEqual(['item1', 'item2', 'item3', 'item4']);
+    });
+
+    it('should filter empty items', () => {
+      vi.mocked(core.getInput).mockReturnValue('item1,,item2,  ,item3');
+
+      const result = getArrayInput('ARRAY_KEY');
+
+      expect(result).toEqual(['item1', 'item2', 'item3']);
+    });
+
+    it('should trim whitespace from items', () => {
+      vi.mocked(core.getInput).mockReturnValue('  item1  ,  item2  ');
+
+      const result = getArrayInput('ARRAY_KEY');
+
+      expect(result).toEqual(['item1', 'item2']);
+    });
+
+    it('should return undefined when input is empty', () => {
       vi.mocked(core.getInput).mockReturnValue('');
 
       const result = getArrayInput('ARRAY_KEY');
 
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe('getDisableableInput', () => {
+    it.each([
+      ['false', undefined],
+      ['FALSE', undefined],
+      ['0', undefined],
+      ['no', undefined],
+      ['NO', undefined]
+    ])('should return undefined for disabled value "%s"', (input) => {
+      vi.mocked(core.getInput).mockReturnValue(input);
+
+      const result = getDisableableInput('DISABLE_KEY', 'default');
+
+      expect(result).toBeUndefined();
+    });
+
+    it('should return default value for empty string', () => {
+      vi.mocked(core.getInput).mockReturnValue('');
+
+      const result = getDisableableInput('DISABLE_KEY', 'default');
+
+      expect(result).toBe('default');
+    });
+
+    it('should return value when not disabled', () => {
+      vi.mocked(core.getInput).mockReturnValue('actual-value');
+
+      const result = getDisableableInput('DISABLE_KEY', 'default');
+
+      expect(result).toBe('actual-value');
+    });
+
+    it('should support false as default value', () => {
+      vi.mocked(core.getInput).mockReturnValue('');
+
+      const result = getDisableableInput('DISABLE_KEY', false);
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('getDisableableArrayInput', () => {
+    it.each([
+      ['false', undefined],
+      ['FALSE', undefined],
+      ['0', undefined],
+      ['no', undefined],
+      ['NO', undefined]
+    ])('should return undefined for disabled value "%s"', (input) => {
+      vi.mocked(core.getInput).mockReturnValue(input);
+
+      const result = getDisableableArrayInput('ARRAY_KEY', ['default']);
+
+      expect(result).toBeUndefined();
+    });
+
+    it('should return default array when input is empty', () => {
+      vi.mocked(core.getInput).mockReturnValue('');
+
+      const result = getDisableableArrayInput('ARRAY_KEY', ['default1', 'default2']);
+
+      expect(result).toEqual(['default1', 'default2']);
+    });
+
+    it('should parse array when not disabled', () => {
+      vi.mocked(core.getInput).mockReturnValue('item1, item2');
+
+      const result = getDisableableArrayInput('ARRAY_KEY', ['default']);
+
+      expect(result).toEqual(['item1', 'item2']);
+    });
+
+    it('should parse newline-separated values', () => {
+      vi.mocked(core.getInput).mockReturnValue('item1\nitem2\nitem3');
+
+      const result = getDisableableArrayInput('ARRAY_KEY', []);
+
+      expect(result).toEqual(['item1', 'item2', 'item3']);
+    });
+
+    it('should filter empty items', () => {
+      vi.mocked(core.getInput).mockReturnValue('item1,,item2,  ,item3');
+
+      const result = getDisableableArrayInput('ARRAY_KEY', []);
+
+      expect(result).toEqual(['item1', 'item2', 'item3']);
     });
   });
 });

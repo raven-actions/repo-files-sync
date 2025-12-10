@@ -12,6 +12,12 @@ const mockInputs: Record<string, string> = {};
 // Mock @actions/core before any imports
 vi.mock('@actions/core', () => ({
   getInput: vi.fn((key: string) => mockInputs[key] ?? ''),
+  getBooleanInput: vi.fn((key: string) => {
+    const value = mockInputs[key]?.toLowerCase();
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    throw new Error(`Input does not meet YAML 1.2 "Core Schema" specification: ${key}`);
+  }),
   debug: vi.fn(),
   info: vi.fn(),
   warning: vi.fn(),
