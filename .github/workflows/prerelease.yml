@@ -12,12 +12,12 @@ on:
 permissions: {}
 
 jobs:
-  prerelease:
-    name: Build and Prerelease
+  build:
+    name: Build
     runs-on: ubuntu-24.04
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -41,78 +41,60 @@ jobs:
       - name: Run build command
         run: pnpm build
 
-      - name: Get latest release tag
-        id: get-latest-release
+      - name: Upload build artifact
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: dist
+          path: dist/
+          retention-days: 1
+
+  prerelease:
+    name: Prerelease
+    needs: [build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifact
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: dist
+          path: dist/
+
+      - name: Get next version
+        id: semver
+        uses: ietf-tools/semver-action@c90370b2958652d71c06a3484129a4d423a6d8a8 # v1.11.0
+        with:
+          token: ${{ github.token }}
+          branch: main
+          noVersionBumpBehavior: patch
+          noNewCommitBehavior: current
+
+      - name: Determine prerelease version
+        id: version
         run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          echo "latest_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
-          if [ -z "$LATEST_TAG" ]; then
-            echo "No previous release found, using initial commit"
-            LATEST_TAG=$(git rev-list --max-parents=0 HEAD)
-          fi
-          echo "compare_base=$LATEST_TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Analyze commits and determine version bump
-        id: version-bump
-        run: |
-          # Get commits since last release
-          COMMITS=$(git log "${COMPARE_BASE}"..HEAD --pretty=format:"%s" 2>/dev/null || git log --pretty=format:"%s")
-
-          # Determine version bump based on conventional commits
-          BUMP="patch"
-
-          while IFS= read -r commit; do
-            # Check for breaking changes
-            if echo "$commit" | grep -qE "^[a-z]+(\(.+\))?!:|BREAKING CHANGE"; then
-              BUMP="major"
-              break
-            fi
-            # Check for features
-            if echo "$commit" | grep -qE "^feat(\(.+\))?:"; then
-              if [ "$BUMP" != "major" ]; then
-                BUMP="minor"
-              fi
-            fi
-          done <<< "$COMMITS"
-
-          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
-
-          # Calculate next version
-          if [ -z "$LATEST_TAG" ]; then
-            NEXT_VERSION="0.1.0-rc.0"
-          else
-            # Remove 'v' prefix if present
-            VERSION="${LATEST_TAG#v}"
-
-            # Parse version components
-            IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-            # Remove any pre-release suffix from PATCH
-            PATCH="${PATCH%%-*}"
-
-            case $BUMP in
-              major)
-                MAJOR=$((MAJOR + 1))
-                MINOR=0
-                PATCH=0
-                ;;
-              minor)
-                MINOR=$((MINOR + 1))
-                PATCH=0
-                ;;
-              patch)
-                PATCH=$((PATCH + 1))
-                ;;
-            esac
-
-            NEXT_VERSION="${MAJOR}.${MINOR}.${PATCH}-rc.${RUN_NUMBER}"
-          fi
-
-          echo "next_version=v${NEXT_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Determined bump: $BUMP, next version: v${NEXT_VERSION}"
+          NEXT_VERSION="${SEMVER_NEXT#v}"
+          PRERELEASE_VERSION="${NEXT_VERSION}-rc.${RUN_NUMBER}"
+          echo "next_version=v${PRERELEASE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Prerelease version: v${PRERELEASE_VERSION}"
         env:
-          COMPARE_BASE: ${{ steps.get-latest-release.outputs.compare_base }}
-          LATEST_TAG: ${{ steps.get-latest-release.outputs.latest_tag }}
+          SEMVER_NEXT: ${{ steps.semver.outputs.next }}
           RUN_NUMBER: ${{ github.run_number }}
+
+      - name: Generate changelog
+        id: changelog
+        uses: requarks/changelog-action@b78a3354a01f4a1affb484b9264b506a815c46b1 # v1.10.3
+        with:
+          token: ${{ github.token }}
+          fromTag: ${{ steps.version.outputs.next_version }}
+          toTag: ${{ steps.semver.outputs.current }}
+          writeToFile: false
+          excludeTypes: build,docs,other,style,chore
 
       - name: Get bot details
         id: bot-details
@@ -167,18 +149,17 @@ jobs:
 
           echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
         env:
-          RELEASE_TAG: ${{ steps.version-bump.outputs.next_version }}
+          RELEASE_TAG: ${{ steps.version.outputs.next_version }}
           BOT_NAME: ${{ steps.bot-details.outputs.name }}
           BOT_EMAIL: ${{ steps.bot-details.outputs.email }}
 
       - name: Create Draft Prerelease
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
-          tag_name: ${{ steps.version-bump.outputs.next_version }}
-          name: ${{ steps.version-bump.outputs.next_version }}
-          # body_path: release_notes.md
+          tag_name: ${{ steps.version.outputs.next_version }}
+          name: ${{ steps.version.outputs.next_version }}
+          body: ${{ steps.changelog.outputs.changes }}
           draft: true
           prerelease: true
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ github.token }}
