@@ -71,11 +71,9 @@ jobs:
         uses: ietf-tools/semver-action@c90370b2958652d71c06a3484129a4d423a6d8a8 # v1.11.0
         with:
           token: ${{ github.token }}
-          branch: main
           noVersionBumpBehavior: patch
           noNewCommitBehavior: current
           skipInvalidTags: true
-          tagFilter: "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
 
       - name: Determine prerelease version
         id: version
@@ -96,7 +94,9 @@ jobs:
           fromTag: ${{ steps.version.outputs.next_version }}
           toTag: ${{ steps.semver.outputs.current }}
           writeToFile: false
-          excludeTypes: build,docs,other,style,chore
+          excludeTypes: build,docs,other,style,chore,ci
+          includeInvalidCommits: true
+          reverseOrder: true
 
       - name: Get bot details
         id: bot-details
