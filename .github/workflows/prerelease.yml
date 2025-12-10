@@ -85,11 +85,17 @@ jobs:
           name: dist
           path: dist/
 
+      - name: Bot Details
+        id: bot-details
+        uses: raven-actions/bot-details@ee8966a9ff6e7e42cbfc4a56b4ddb60a9d1b40a6 # v1.2.0
+        with:
+          set-env: false
+
       - name: Prepare Release Branch
         id: release-branch
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "${BOT_NAME}"
+          git config user.email "${BOT_EMAIL}"
 
           RELEASE_BRANCH="release/${RELEASE_TAG}"
 
@@ -99,13 +105,15 @@ jobs:
 
           git checkout -b "${RELEASE_BRANCH}"
           git add -A
-          git commit -m "chore(release): prepare ${RELEASE_TAG} for publishing"
+          git commit -m "chore(release): ${RELEASE_TAG}"
           git push origin "${RELEASE_BRANCH}"
 
           # ouput release branch
           echo "name=${RELEASE_BRANCH}" >> "$GITHUB_OUTPUT"
         env:
           RELEASE_TAG: ${{ steps.release-details.outputs.version }}
+          BOT_NAME: ${{ steps.bot-details.outputs.name }}
+          BOT_EMAIL: ${{ steps.bot-details.outputs.email }}
 
       - name: Create Draft Prerelease
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
@@ -119,13 +127,3 @@ jobs:
           target_commitish: ${{ steps.release-branch.outputs.name }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
-
-      - name: Remove Release Branch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git branch -D "${RELEASE_BRANCH}"
-          git push origin --delete "${RELEASE_BRANCH}"
-        env:
-          RELEASE_BRANCH: ${{ steps.release-branch.outputs.name }}
