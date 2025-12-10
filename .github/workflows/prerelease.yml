@@ -87,9 +87,17 @@ jobs:
         env:
           SEMVER_NEXT: ${{ steps.semver.outputs.next }}
 
+      - name: Get bot details
+        id: bot-details
+        uses: raven-actions/bot-details@ee8966a9ff6e7e42cbfc4a56b4ddb60a9d1b40a6 # v1.2.0
+
       - name: Prepare release tree and create tag
         id: prepare_release
         run: |
+          # Configure git identity for commit-tree
+          git config user.name "$BOT_NAME"
+          git config user.email "$BOT_EMAIL"
+
           # Delete existing tag/release if it exists (for draft prereleases)
           if git rev-parse "$RELEASE_TAG" >/dev/null 2>&1; then
             echo "Tag $RELEASE_TAG already exists, deleting it..."
@@ -158,6 +166,8 @@ jobs:
           RELEASE_TAG: ${{ steps.version.outputs.next_version }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          BOT_NAME: ${{ steps.bot-details.outputs.name }}
+          BOT_EMAIL: ${{ steps.bot-details.outputs.email }}
 
       - name: Generate changelog
         id: changelog
