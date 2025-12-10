@@ -84,26 +84,56 @@ jobs:
           PRERELEASE_TAG="v${PRERELEASE_VERSION}"
           echo "next_version=${PRERELEASE_TAG}" >> "$GITHUB_OUTPUT"
           echo "Prerelease version: ${PRERELEASE_TAG}"
+        env:
+          SEMVER_NEXT: ${{ steps.semver.outputs.next }}
 
-          # Delete existing tag if it exists (for draft prereleases)
-          if git rev-parse "$PRERELEASE_TAG" >/dev/null 2>&1; then
-            echo "Tag $PRERELEASE_TAG already exists, deleting it..."
-            gh release delete "$PRERELEASE_TAG" --yes || true
-            git push origin --delete "$PRERELEASE_TAG" || true
-            git tag -d "$PRERELEASE_TAG" || true
+      - name: Prepare release tree and create tag
+        id: prepare_release
+        run: |
+          # Delete existing tag/release if it exists (for draft prereleases)
+          if git rev-parse "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Tag $RELEASE_TAG already exists, deleting it..."
+            gh release delete "$RELEASE_TAG" --yes || true
+            gh api --method DELETE "/repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}" || true
+            git tag -d "$RELEASE_TAG" || true
           fi
 
+          # Create a tree with only the required files
+          # First, get the tree entries for files we want to include
+          LICENSE_BLOB=$(git hash-object -w LICENSE)
+          README_BLOB=$(git hash-object -w README.md)
+          ACTION_BLOB=$(git hash-object -w action.yml)
+
+          # Create blobs for dist files and build the dist tree
+          DIST_TREE_ENTRIES=""
+          for file in dist/*; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              blob=$(git hash-object -w "$file")
+              DIST_TREE_ENTRIES="${DIST_TREE_ENTRIES}100644 blob ${blob}\t${filename}\n"
+            fi
+          done
+
+          # Create dist tree
+          DIST_TREE=$(echo -e "$DIST_TREE_ENTRIES" | git mktree)
+
+          # Create the root tree with LICENSE, README.md, action.yml, and dist/
+          ROOT_TREE=$(echo -e "100644 blob ${LICENSE_BLOB}\tLICENSE\n100644 blob ${README_BLOB}\tREADME.md\n100644 blob ${ACTION_BLOB}\taction.yml\n040000 tree ${DIST_TREE}\tdist" | git mktree)
+
+          # Create a commit for this tree (orphan commit, no parent)
+          COMMIT_SHA=$(git commit-tree "$ROOT_TREE" -m "chore(release): ${RELEASE_TAG}")
+
           # Create tag using GitHub API for verified signature
-          COMMIT_SHA="$(git rev-parse HEAD)"
-          gh api \
+          TAG_SHA=$(gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "/repos/${GITHUB_REPOSITORY}/git/tags" \
-            -f tag="${PRERELEASE_TAG}" \
-            -f message="${PRERELEASE_TAG}" \
+            -f tag="${RELEASE_TAG}" \
+            -f message="Release ${RELEASE_TAG}" \
             -f object="${COMMIT_SHA}" \
-            -f type="commit"
+            -f type="commit" \
+            --jq '.sha')
 
           # Create the ref pointing to the tag
           gh api \
@@ -111,11 +141,12 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "/repos/${GITHUB_REPOSITORY}/git/refs" \
-            -f ref="refs/tags/${PRERELEASE_TAG}" \
-            -f sha="${COMMIT_SHA}"
+            -f ref="refs/tags/${RELEASE_TAG}" \
+            -f sha="${TAG_SHA}"
+
+          echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
         env:
-          SEMVER_NEXT: ${{ steps.semver.outputs.next }}
-          RUN_NUMBER: ${{ github.run_number }}
+          RELEASE_TAG: ${{ steps.version.outputs.next_version }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
 
