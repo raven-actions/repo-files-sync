@@ -84,15 +84,22 @@ jobs:
         run: |
           NEXT_VERSION="${SEMVER_NEXT#v}"
           PRERELEASE_VERSION="${NEXT_VERSION}-rc.${RUN_NUMBER}"
-          echo "next_version=v${PRERELEASE_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Prerelease version: v${PRERELEASE_VERSION}"
-          # create prerelease tag
-
+          PRERELEASE_TAG="v${PRERELEASE_VERSION}"
+          echo "next_version=${PRERELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Prerelease version: ${PRERELEASE_TAG}"
 
           git config user.name "$BOT_NAME"
           git config user.email "$BOT_EMAIL"
-          git tag -a "v${PRERELEASE_VERSION}" -m "Prerelease v${PRERELEASE_VERSION}"
-          git push origin "v${PRERELEASE_VERSION}"
+
+          # Delete existing tag if it exists (for draft prereleases)
+          if git rev-parse "$PRERELEASE_TAG" >/dev/null 2>&1; then
+            echo "Tag $PRERELEASE_TAG already exists, deleting it..."
+            git push origin --delete "$PRERELEASE_TAG" || true
+            git tag -d "$PRERELEASE_TAG" || true
+          fi
+
+          git tag -a "${PRERELEASE_TAG}" -m "Prerelease ${PRERELEASE_TAG}"
+          git push origin "${PRERELEASE_TAG}"
         env:
           SEMVER_NEXT: ${{ steps.semver.outputs.next }}
           RUN_NUMBER: ${{ github.run_number }}
