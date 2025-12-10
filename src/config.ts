@@ -3,7 +3,7 @@ import * as yaml from 'js-yaml';
 import fs from 'fs-extra';
 import * as path from 'path';
 
-import { getInput, getBooleanInput, getArrayInput, getOptionalInput, getRequiredInput } from './input.js';
+import { getInput, getBooleanInput, getArrayInput, getOptionalInput, getDisableableInput, getDisableableArrayInput } from './input.js';
 import type { ConfigContext, RepoInfo, FileConfig, RepoConfig } from './types.js';
 
 // Default values
@@ -16,10 +16,10 @@ const DELETE_ORPHANED_DEFAULT = false;
  */
 function initializeContext(): ConfigContext {
   let isInstallationToken = false;
-  let token = getInput({ key: 'GH_PAT' }) as string | undefined;
+  let token = getInput('GH_PAT');
 
   if (!token) {
-    token = getInput({ key: 'GH_INSTALLATION_TOKEN' }) as string | undefined;
+    token = getInput('GH_INSTALLATION_TOKEN');
     isInstallationToken = true;
 
     if (!token) {
@@ -32,20 +32,15 @@ function initializeContext(): ConfigContext {
     GITHUB_TOKEN: token,
     GITHUB_SERVER_URL: process.env['GITHUB_SERVER_URL'] || 'https://github.com',
     IS_INSTALLATION_TOKEN: isInstallationToken,
-    GIT_EMAIL: getInput({ key: 'GIT_EMAIL' }) as string | undefined,
-    GIT_USERNAME: getInput({ key: 'GIT_USERNAME' }) as string | undefined,
+    GIT_EMAIL: getInput('GIT_EMAIL') || undefined,
+    GIT_USERNAME: getInput('GIT_USERNAME') || undefined,
     CONFIG_PATH: getOptionalInput('CONFIG_PATH', '.github/sync.yml'),
     INLINE_CONFIG: getOptionalInput('INLINE_CONFIG', ''),
     IS_FINE_GRAINED: getBooleanInput('IS_FINE_GRAINED', false),
     COMMIT_BODY: getOptionalInput('COMMIT_BODY', ''),
     COMMIT_PREFIX: getOptionalInput('COMMIT_PREFIX', '🔄'),
     COMMIT_EACH_FILE: getBooleanInput('COMMIT_EACH_FILE', true),
-    PR_LABELS: getInput({
-      key: 'PR_LABELS',
-      type: 'array',
-      default: ['sync'],
-      disableable: true
-    }) as string[] | undefined,
+    PR_LABELS: getDisableableArrayInput('PR_LABELS', ['sync']),
     PR_BODY: getOptionalInput('PR_BODY', ''),
     ASSIGNEES: getArrayInput('ASSIGNEES'),
     REVIEWERS: getArrayInput('REVIEWERS'),
@@ -54,17 +49,13 @@ function initializeContext(): ConfigContext {
     DRY_RUN: getBooleanInput('DRY_RUN', false),
     SKIP_CLEANUP: getBooleanInput('SKIP_CLEANUP', false),
     OVERWRITE_EXISTING_PR: getBooleanInput('OVERWRITE_EXISTING_PR', true),
-    GITHUB_REPOSITORY: getRequiredInput('GITHUB_REPOSITORY'),
+    GITHUB_REPOSITORY: process.env['GITHUB_REPOSITORY'] || '',
     SKIP_PR: getBooleanInput('SKIP_PR', false),
     ORIGINAL_MESSAGE: getBooleanInput('ORIGINAL_MESSAGE', false),
     COMMIT_AS_PR_TITLE: getBooleanInput('COMMIT_AS_PR_TITLE', false),
     DELETE_ORPHANED: getBooleanInput('DELETE_ORPHANED', false),
     BRANCH_PREFIX: getOptionalInput('BRANCH_PREFIX', 'repo-sync/SOURCE_REPO_NAME'),
-    FORK: getInput({
-      key: 'FORK',
-      disableable: true,
-      default: false
-    }) as string | false
+    FORK: getDisableableInput('FORK', false)
   };
 
   core.setSecret(context.GITHUB_TOKEN);

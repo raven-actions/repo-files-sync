@@ -78,7 +78,7 @@ export interface ConfigContext {
   COMMIT_AS_PR_TITLE: boolean;
   DELETE_ORPHANED: boolean;
   BRANCH_PREFIX: string;
-  FORK: string | false;
+  FORK: string | false | undefined;
 }
 
 // Helper function callback types

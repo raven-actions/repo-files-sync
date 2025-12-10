@@ -38,7 +38,9 @@
   },
   "files": [
     "dist/*",
-    "LICENSE"
+    "action.yml",
+    "LICENSE",
+    "README.md"
   ],
   "homepage": "https://github.com/marketplace/actions/repo-files-sync",
   "keywords": [
