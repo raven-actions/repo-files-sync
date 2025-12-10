@@ -68,14 +68,43 @@ jobs:
           config: .github/cliff.toml
           args: --unreleased --bump --strip header
 
+      - name: Cleanup
+        run: |
+          find . -maxdepth 1 \
+            ! -name '.' \
+            ! -name '.git' \
+            ! -name 'README.md' \
+            ! -name 'LICENSE' \
+            ! -name 'action.yml' \
+            -exec rm -rf {} +
+
       - name: Download build artifact
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: dist
           path: dist/
 
-      # - run: |
-      #     find . -maxdepth 1 ! -name 'dist' ! -name '.' ! -name 'README.md' ! -name 'LICENSE' ! -name 'action.yml' -exec rm -rf {} +
+      - name: Commit and Push to Release Branch
+        id: release-branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          RELEASE_BRANCH="release/${RELEASE_TAG}"
+
+          # Delete branch if it exists (locally and remotely)
+          git branch -D "${RELEASE_BRANCH}" 2>/dev/null || true
+          git push origin --delete "${RELEASE_BRANCH}" 2>/dev/null || true
+
+          git checkout -b "${RELEASE_BRANCH}"
+          git add -A
+          git commit -m "chore(release): prepare ${RELEASE_TAG} for publishing"
+          git push origin "${RELEASE_BRANCH}"
+
+          # ouput release branch
+          echo "name=${RELEASE_BRANCH}" >> "$GITHUB_OUTPUT"
+        env:
+          RELEASE_TAG: ${{ steps.release-details.outputs.version }}
 
       - name: Create Draft Prerelease
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
@@ -83,10 +112,9 @@ jobs:
           tag_name: ${{ steps.release-details.outputs.version }}
           name: ${{ steps.release-details.outputs.version }}
           body: ${{ steps.release-details.outputs.content }}
-          draft: true
+          draft: false
           prerelease: true
           generate_release_notes: false
-          files: |
-            dist/**
+          target_commitish: ${{ steps.release-branch.outputs.name }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
