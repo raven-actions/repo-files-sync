@@ -54,8 +54,6 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-      id-token: write
-      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -76,8 +74,8 @@ jobs:
           name: dist
           path: dist/
 
-      - run: |
-          find . -maxdepth 1 ! -name 'dist' ! -name '.' ! -name 'README.md' ! -name 'LICENSE' ! -name 'action.yml' -exec rm -rf {} +
+      # - run: |
+      #     find . -maxdepth 1 ! -name 'dist' ! -name '.' ! -name 'README.md' ! -name 'LICENSE' ! -name 'action.yml' -exec rm -rf {} +
 
       - name: Create Draft Prerelease
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
@@ -90,12 +88,5 @@ jobs:
           generate_release_notes: false
           files: |
             dist/**
-            LICENSE
-            README.md
-            action.yml
         env:
           GITHUB_TOKEN: ${{ github.token }}
-
-      - name: Publish
-        id: publish
-        uses: actions/publish-immutable-action@4bc8754ffc40f27910afb20287dbbbb675a4e978 # v0.0.4
