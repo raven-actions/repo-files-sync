@@ -70,13 +70,14 @@ jobs:
 
       - name: Cleanup
         run: |
-          find . -maxdepth 1 \
-            ! -name '.' \
-            ! -name '.git' \
-            ! -name 'README.md' \
-            ! -name 'LICENSE' \
-            ! -name 'action.yml' \
-            -exec rm -rf {} +
+              find . -maxdepth 1 \
+              ! -name '.' \
+              ! -name '.git' \
+              ! -name '.github' \
+              ! -name 'README.md' \
+              ! -name 'LICENSE' \
+              ! -name 'action.yml' \
+              -exec rm -rf {} +
 
       - name: Download build artifact
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0

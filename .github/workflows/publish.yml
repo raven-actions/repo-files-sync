@@ -4,12 +4,6 @@ name: Publish
 on:
   release:
     types: [published]
-  workflow_dispatch:
-    inputs:
-      release_tag:
-        description: 'Release tag to publish (e.g., v1.0.0)'
-        required: true
-        type: string
 
 permissions: {}
 
@@ -23,45 +17,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-        with:
-          ref: ${{ github.event.release.tag_name || inputs.release_tag }}
+        # with:
+          # ref: ${{ github.event.release.tag_name }}
           # persist-credentials: false
-
-      # - name: Cleanup
-      #   run: |
-      #     find . -maxdepth 1 \
-      #       ! -name '.' \
-      #       ! -name '.git' \
-      #       ! -name 'README.md' \
-      #       ! -name 'LICENSE' \
-      #       ! -name 'action.yml' \
-      #       -exec rm -rf {} +
-
-      # - name: Download Release Assets
-      #   run: |
-      #     mkdir -p dist
-      #     gh release download "${RELEASE_TAG}" --clobber --dir dist
-      #   env:
-      #     RELEASE_TAG: ${{ github.event.release.tag_name }}
-      #     GH_TOKEN: ${{ github.token }}
-
-      # - name: Commit and Push to Release Branch
-      #   run: |
-      #     git config user.name "github-actions[bot]"
-      #     git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      #     RELEASE_BRANCH="release/${RELEASE_TAG}"
-
-      #     # Delete branch if it exists (locally and remotely)
-      #     git branch -D "${RELEASE_BRANCH}" 2>/dev/null || true
-      #     git push origin --delete "${RELEASE_BRANCH}" 2>/dev/null || true
-
-      #     git checkout -b "${RELEASE_BRANCH}"
-      #     git add -A
-      #     git commit -m "chore(release): prepare ${RELEASE_TAG} for publishing"
-      #     git push origin "${RELEASE_BRANCH}"
-      #   env:
-      #     RELEASE_TAG: ${{ github.event.release.tag_name }}
 
       - name: Publish
         id: publish
