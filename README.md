@@ -1,6 +1,14 @@
-# Repo Files Sync Action
+# 🔁 Repo Files Sync Action
 
-[![CI](https://github.com/raven-actions/repo-files-sync/workflows/CI/badge.svg)](https://github.com/raven-actions/repo-files-sync/actions?query=workflow%3ACI) [![Release](https://github.com/raven-actions/repo-files-sync/workflows/Release/badge.svg)](https://github.com/raven-actions/repo-files-sync/actions?query=workflow%3ARelease) [![GitHub](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/raven-actions/repo-files-sync/blob/master/LICENSE)
+[![GitHub - marketplace](https://img.shields.io/badge/marketplace-publish--and--tag-blue?logo=github&style=flat-square)](https://github.com/marketplace/actions/repo-files-sync)
+[![GitHub - release](https://img.shields.io/github/v/release/raven-actions/repo-files-sync?style=flat-square)](https://github.com/raven-actions/repo-files-sync/releases/latest)
+[![GitHub - ci](https://img.shields.io/github/actions/workflow/status/raven-actions/repo-files-sync/ci.yml?logo=github&label=CI&style=flat-square&branch=main&event=push)](https://github.com/raven-actions/repo-files-sync/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush)
+[![GitHub - license](https://img.shields.io/github/license/raven-actions/repo-files-sync?style=flat-square)](https://github.com/raven-actions/repo-files-sync/blob/main/LICENSE)
+[![Codecov](https://img.shields.io/codecov/c/github/raven-actions/repo-files-sync/main?logo=codecov&style=flat-square&token=VxxCGXH3R5)](https://codecov.io/github/raven-actions/repo-files-sync)
+
+---
+
+> ⚠️ This is a heavily modified fork project of the [repo-file-sync-action](https://github.com/BetaHuhn/repo-file-sync-action), which looks like is stale.
 
 Keep files like Action workflows or entire directories in sync between multiple repositories.
 
@@ -99,33 +107,33 @@ With the `v1` tag you will always get the latest non-breaking version which will
 
 Here are all the inputs [repo-files-sync](https://github.com/raven-actions/repo-files-sync) takes:
 
-| Key | Value | Required | Default |
-| ------------- | ------------- | ------------- | ------------- |
-| `GH_PAT` | Your [Personal Access token](https://docs.github.com/en/free-pro-team@latest/github/authenticating-to-github/creating-a-personal-access-token) | **`GH_PAT` or `GH_INSTALLATION_TOKEN` required** | N/A |
-| `GH_INSTALLATION_TOKEN` | Token from a GitHub App installation | **`GH_PAT` or `GH_INSTALLATION_TOKEN` required** | N/A |
-| `CONFIG_PATH` | Path to the sync configuration file | **No** | .github/sync.yml |
-| `INLINE_CONFIG` | Inline YAML configuration (alternative to CONFIG_PATH) | **No** | N/A |
-| `IS_FINE_GRAINED` | Labels the GH_PAT as a fine grained token | **No** | false |
-| `PR_LABELS` | Labels which will be added to the pull request. Set to false to turn off | **No** | sync |
-| `ASSIGNEES` | Users to assign to the pull request | **No** | N/A |
-| `REVIEWERS` | Users to request a review of the pull request from | **No** | N/A |
-| `TEAM_REVIEWERS` | Teams to request a review of the pull request from | **No** | N/A |
-| `COMMIT_PREFIX` | Prefix for commit message and pull request title | **No** | 🔄 |
-| `COMMIT_BODY` | Commit message body. Will be appended to commit message, separated by two line returns. | **No** | '' |
-| `PR_BODY` | Additional content to add in the PR description. | **No** | '' |
-| `ORIGINAL_MESSAGE` | Use original commit message instead. Only works if the file(s) were changed and the action was triggered by pushing a single commit. | **No** | false |
-| `COMMIT_AS_PR_TITLE` | Use first line of the commit message as PR title. Only works if `ORIGINAL_MESSAGE` is `true` and working. | **No** | false |
-| `COMMIT_EACH_FILE` | Commit each file seperately | **No** | true |
-| `GIT_EMAIL` | The e-mail address used to commit the synced files | **Only when using installation token** | the email of the PAT used |
-| `GIT_USERNAME` | The username used to commit the synced files | **Only when using installation token** | the username of the PAT used |
-| `OVERWRITE_EXISTING_PR` | Overwrite any existing Sync PR with the new changes | **No** | true |
-| `BRANCH_PREFIX` | Specify a different prefix for the new branch in the target repo | **No** | repo-sync/SOURCE_REPO_NAME |
-| `TMP_DIR` | The working directory where all git operations will be done | **No** | tmp-${ Date.now().toString() } |
-| `DRY_RUN` | Run everything except that nothing will be pushed | **No** | false |
-| `SKIP_CLEANUP` | Skips removing the temporary directory. Useful for debugging | **No** | false |
-| `SKIP_PR` | Skips creating a Pull Request and pushes directly to the default branch | **No** | false |
-| `DELETE_ORPHANED` | Global default for deleting orphaned files in target repositories | **No** | false |
-| `FORK` | A Github account username. Changes will be pushed to a fork of target repos on this account. | **No** | false |
+| Key                     | Value                                                                                                                                          | Required                                         | Default                        |
+|-------------------------|------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------|--------------------------------|
+| `GH_PAT`                | Your [Personal Access token](https://docs.github.com/en/free-pro-team@latest/github/authenticating-to-github/creating-a-personal-access-token) | **`GH_PAT` or `GH_INSTALLATION_TOKEN` required** | N/A                            |
+| `GH_INSTALLATION_TOKEN` | Token from a GitHub App installation                                                                                                           | **`GH_PAT` or `GH_INSTALLATION_TOKEN` required** | N/A                            |
+| `CONFIG_PATH`           | Path to the sync configuration file                                                                                                            | **No**                                           | .github/sync.yml               |
+| `INLINE_CONFIG`         | Inline YAML configuration (alternative to CONFIG_PATH)                                                                                         | **No**                                           | N/A                            |
+| `IS_FINE_GRAINED`       | Labels the GH_PAT as a fine grained token                                                                                                      | **No**                                           | false                          |
+| `PR_LABELS`             | Labels which will be added to the pull request. Set to false to turn off                                                                       | **No**                                           | sync                           |
+| `ASSIGNEES`             | Users to assign to the pull request                                                                                                            | **No**                                           | N/A                            |
+| `REVIEWERS`             | Users to request a review of the pull request from                                                                                             | **No**                                           | N/A                            |
+| `TEAM_REVIEWERS`        | Teams to request a review of the pull request from                                                                                             | **No**                                           | N/A                            |
+| `COMMIT_PREFIX`         | Prefix for commit message and pull request title                                                                                               | **No**                                           | 🔄                             |
+| `COMMIT_BODY`           | Commit message body. Will be appended to commit message, separated by two line returns.                                                        | **No**                                           | ''                             |
+| `PR_BODY`               | Additional content to add in the PR description.                                                                                               | **No**                                           | ''                             |
+| `ORIGINAL_MESSAGE`      | Use original commit message instead. Only works if the file(s) were changed and the action was triggered by pushing a single commit.           | **No**                                           | false                          |
+| `COMMIT_AS_PR_TITLE`    | Use first line of the commit message as PR title. Only works if `ORIGINAL_MESSAGE` is `true` and working.                                      | **No**                                           | false                          |
+| `COMMIT_EACH_FILE`      | Commit each file seperately                                                                                                                    | **No**                                           | true                           |
+| `GIT_EMAIL`             | The e-mail address used to commit the synced files                                                                                             | **Only when using installation token**           | the email of the PAT used      |
+| `GIT_USERNAME`          | The username used to commit the synced files                                                                                                   | **Only when using installation token**           | the username of the PAT used   |
+| `OVERWRITE_EXISTING_PR` | Overwrite any existing Sync PR with the new changes                                                                                            | **No**                                           | true                           |
+| `BRANCH_PREFIX`         | Specify a different prefix for the new branch in the target repo                                                                               | **No**                                           | repo-sync/SOURCE_REPO_NAME     |
+| `TMP_DIR`               | The working directory where all git operations will be done                                                                                    | **No**                                           | tmp-${ Date.now().toString() } |
+| `DRY_RUN`               | Run everything except that nothing will be pushed                                                                                              | **No**                                           | false                          |
+| `SKIP_CLEANUP`          | Skips removing the temporary directory. Useful for debugging                                                                                   | **No**                                           | false                          |
+| `SKIP_PR`               | Skips creating a Pull Request and pushes directly to the default branch                                                                        | **No**                                           | false                          |
+| `DELETE_ORPHANED`       | Global default for deleting orphaned files in target repositories                                                                              | **No**                                           | false                          |
+| `FORK`                  | A Github account username. Changes will be pushed to a fork of target repos on this account.                                                   | **No**                                           | false                          |
 
 ### Outputs
 
@@ -282,15 +290,15 @@ This is some content
 
 Every Nunjucks template context automatically includes a `repo` object with information about the target repository:
 
-| Variable | Description | Example |
-| -------- | ----------- | ------- |
-| `repo.url` | Full HTTPS URL | `https://github.com/user/repo` |
-| `repo.fullName` | Host + owner + name | `github.com/user/repo` |
-| `repo.uniqueName` | Full name with branch | `github.com/user/repo@main` |
-| `repo.host` | Host name | `github.com` |
-| `repo.user` | Owner/organization | `user` |
-| `repo.name` | Repository name | `repo` |
-| `repo.branch` | Target branch | `main` |
+| Variable          | Description           | Example                        |
+|-------------------|-----------------------|--------------------------------|
+| `repo.url`        | Full HTTPS URL        | `https://github.com/user/repo` |
+| `repo.fullName`   | Host + owner + name   | `github.com/user/repo`         |
+| `repo.uniqueName` | Full name with branch | `github.com/user/repo@main`    |
+| `repo.host`       | Host name             | `github.com`                   |
+| `repo.user`       | Owner/organization    | `user`                         |
+| `repo.name`       | Repository name       | `repo`                         |
+| `repo.branch`     | Target branch         | `main`                         |
 
 This is useful for bulk templating across multiple repositories:
 
@@ -707,8 +715,10 @@ group:
       rave-actions/drkmd.js
 ```
 
-## 📄 License
+## 👥 Contributing
 
-Copyright 2025 Raven Actions
+Contributions to the project are welcome! Please follow [Contributing Guide](https://github.com/raven-actions/repo-files-sync/blob/main/.github/CONTRIBUTING.md).
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## 🛡️ License
+
+This project is distributed under the terms of the [MIT](https://github.com/raven-actions/repo-files-sync/blob/main/LICENSE) license.
