@@ -1,7 +1,7 @@
 {
   "name": "repo-files-sync",
   "description": "GitHub Action to keep files like Action workflows or entire directories in sync between multiple repositories.",
-  "version": "0.0.0",
+  "version": "0.0.0-development",
   "author": "Raven Actions",
   "bugs": "https://github.com/raven-actions/repo-files-sync/issues",
   "contributors": [
