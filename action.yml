@@ -1,110 +1,151 @@
-name: 'Repo File Sync Action'
-description: 'GitHub Action to Sync Files like Workflows Between Repositories.'
-author: 'BetaHuhn'
+---
+name: Repo Files Sync
+description: GitHub Action to Sync Files like Workflows Between Repositories.
+author: Raven Actions
 
 inputs:
   GH_PAT:
     description: |
-      GitHub Personal Access Token to use to get repos and write secrets
+      GitHub Personal Access Token used to access target repositories.
+      Note: `GITHUB_TOKEN` will not work for cross-repo sync.
     required: false
   GH_INSTALLATION_TOKEN:
     description: |
-      GitHub App Installation Token to used to access repos
+      GitHub App Installation Token used to access target repositories.
+      When set, commits are created using the GitHub API.
     required: false
   CONFIG_PATH:
-    description: | 
-      The path for the sync configuration file
-    required: false
-  IS_FINE_GRAINED: 
     description: |
-      Label GH_PAT as a fine grained token
+      Path to the sync configuration file.
+      Defaults to `.github/sync.yml`.
+    required: false
+  INLINE_CONFIG:
+    description: |
+      Inline YAML configuration (alternative to CONFIG_PATH).
+      When set, this is used instead of reading CONFIG_PATH.
+    required: false
+  IS_FINE_GRAINED:
+    description: |
+      Set to true if GH_PAT is a fine-grained token.
+      Defaults to false.
     required: false
   PR_LABELS:
     description: |
-      Labels which will be added to the pull request. Defaults to sync. Set to false to turn off
+      Labels to add to the pull request.
+      Defaults to `sync`. Set to `false` to disable.
     required: false
   PR_BODY:
     description: |
-      Additional content to add in the PR description. Defaults to ''
+      Additional content to add in the PR description.
+      Defaults to an empty string.
     required: false
   ASSIGNEES:
     description: |
-      Users to assign to the pull request. Defaults to none
+      Users to assign to the pull request.
+      Defaults to none.
     required: false
   REVIEWERS:
     description: |
-      Users to request a review of the pull request from. Defaults to none
+      Users to request a review from.
+      Defaults to none.
     required: false
   TEAM_REVIEWERS:
     description: |
-      Teams to request a review of the pull request from. Defaults to none
+      Teams to request a review from.
+      Defaults to none.
     required: false
   COMMIT_PREFIX:
     description: |
-      Prefix for commit message and pull request title. Defaults to 🔄
+      Prefix for commit message and pull request title.
+      Defaults to 🔄.
     required: false
   COMMIT_BODY:
     description: |
-      Commit message body. Will be appended to commit message, separated by two line returns. Defaults to ''
+      Commit message body.
+      Appended to the commit message, separated by two line returns.
+      Defaults to an empty string.
     required: false
   COMMIT_EACH_FILE:
     description: |
-      Commit each file seperately. Defaults to true
+      Commit each configured file/directory separately.
+      Defaults to true.
     required: false
   GIT_EMAIL:
     description: |
-      The e-mail address used to commit the synced files. Defaults to the email of the GitHub PAT
+      Email used for commits.
+      Required when using GH_INSTALLATION_TOKEN.
     required: false
   GIT_USERNAME:
     description: |
-      The username used to commit the synced files. Defaults to the username of the GitHub PAT
+      Username used for commits.
+      Required when using GH_INSTALLATION_TOKEN.
     required: false
   TMP_DIR:
     description: |
-      The working directory where all sync operations will be done. Defaults to `tmp-${Date.now().toString()}`
+      Working directory where all sync operations are performed.
+      Defaults to `tmp-${Date.now().toString()}`.
     required: false
   DRY_RUN:
     description: |
-      Run everything except for nothing will be updated. Defaults to false
+      Runs the sync logic but does not push any changes.
+      Defaults to false.
     required: false
   SKIP_CLEANUP:
     description: |
-      Skip removing the temporary directory (useful for debugging). Defaults to false
+      Skip removing the temporary directory (useful for debugging).
+      Defaults to false.
     required: false
   OVERWRITE_EXISTING_PR:
     description: |
-      Overwrite any existing Sync PR with the new changes. Defaults to true
+      Reuse the same sync branch/PR between runs.
+      If false, create a new branch per run.
+      Defaults to true.
     required: false
   ORIGINAL_MESSAGE:
     description: |
-      Re-use the original commit message for commits. Works only if the action is triggered by pushing one commit. Defaults to false
+      Re-use the original commit message for commits.
+      Works only if the workflow is triggered by a push
+      containing a single commit.
+      Defaults to false.
     required: false
   COMMIT_AS_PR_TITLE:
     description: |
-      Re-use the commit message as PR title. Works only if ORIGINAL_MESSAGE is on and PR has one commit. Defaults to false
+      Use the commit message as PR title.
+      Works only if ORIGINAL_MESSAGE is true and exactly one commit is created.
+      Defaults to false.
     required: false
   SKIP_PR:
     description: |
-      Skips creating a Pull Request and pushes directly to the default branch. Defaults to false
+      Skips creating a Pull Request and pushes directly to the default branch.
+      Defaults to false
     required: false
   BRANCH_PREFIX:
     description: |
-      Specify a different prefix for the new branch in the target repo. Defaults to repo-sync/SOURCE_REPO_NAME
+      Specify a different prefix for the new branch in the target repo.
+      Defaults to repo-sync/SOURCE_REPO_NAME
+    required: false
+  DELETE_ORPHANED:
+    description: |
+      Global default for deleting orphaned files in target repositories.
+      Used when file-level `deleteOrphaned` is not set.
+      Defaults to false.
     required: false
   FORK:
     description: |
-      Specify the user account that will be used in a fork and pull-request workflow. Defaults
-      false.
+      Specify the user account for a fork and pull-request workflow.
+      Defaults to false.
     required: false
 
 outputs:
   pull_request_urls:
-    description: 'The URLs to the created Pull Requests as an array'
+    description: |
+      JSON array of created Pull Request URLs.
+      Empty when no PRs were created.
 
 runs:
-  using: 'node20'
-  main: 'dist/index.js'
+  using: node24
+  main: dist/index.mjs
 
 branding:
-  icon: 'git-pull-request'
-  color: 'gray-dark'
+  icon: git-pull-request
+  color: gray-dark

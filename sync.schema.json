@@ -1,0 +1,299 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/raven-actions/repo-files-sync/sync.schema.json",
+  "title": "Repo Sync Configuration",
+  "description": "Configuration schema for repo-files-sync GitHub Action sync.yml file",
+  "type": "object",
+  "additionalProperties": {
+    "oneOf": [
+      {
+        "$ref": "#/definitions/fileList"
+      },
+      {
+        "$ref": "#/definitions/groupWrapper"
+      }
+    ]
+  },
+  "properties": {
+    "group": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/group"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/group"
+          },
+          "minItems": 1,
+          "description": "Array of group configurations for syncing the same files to multiple repositories"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "repositoryName": {
+      "type": "string",
+      "description": "Repository name in format 'owner/repo', 'owner/repo@branch', or full URL like 'https://github.example.com/owner/repo@branch'",
+      "examples": [
+        "owner/repo",
+        "owner/repo@main",
+        "owner/repo@feature-branch",
+        "https://github.example.com/owner/repo",
+        "https://github.example.com/owner/repo@main"
+      ]
+    },
+    "fileSource": {
+      "type": "string",
+      "description": "Source file or directory path relative to the source repository root",
+      "examples": [
+        "src/config.json",
+        ".github/workflows/",
+        "LICENSE"
+      ]
+    },
+    "fileConfigObject": {
+      "type": "object",
+      "description": "Detailed file synchronization configuration",
+      "required": ["source"],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Source file or directory path relative to the source repository root"
+        },
+        "dest": {
+          "type": "string",
+          "description": "Destination file or directory path in the target repository. Defaults to the same as source if not specified"
+        },
+        "replace": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to replace existing files in the target repository. Set to false to only create files if they don't exist"
+        },
+        "template": {
+          "oneOf": [
+            {
+              "type": "boolean",
+              "description": "Set to true to enable Nunjucks templating with default context (includes repo object)"
+            },
+            {
+              "type": "object",
+              "description": "Enable Nunjucks templating with custom context variables. The repo object is automatically included",
+              "additionalProperties": true
+            }
+          ],
+          "default": false,
+          "description": "Enable Nunjucks templating for the file. Can be true/false or an object with custom template variables"
+        },
+        "deleteOrphaned": {
+          "type": "boolean",
+          "default": false,
+          "description": "Delete files in the target that no longer exist in the source. Works for both directories and single files"
+        },
+        "include": {
+          "type": "string",
+          "description": "Newline-separated glob patterns of files to include when syncing directories (relative to source)",
+          "examples": [
+            "**/*.yml\n**/*.yaml",
+            "src/**\n!src/generated/**"
+          ]
+        },
+        "exclude": {
+          "type": "string",
+          "description": "Newline-separated glob patterns to exclude when syncing directories (relative to source)",
+          "examples": [
+            "node_modules\n.git\n*.log",
+            "dist\nbuild"
+          ]
+        }
+      }
+    },
+    "fileItem": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/fileSource"
+        },
+        {
+          "$ref": "#/definitions/fileConfigObject"
+        }
+      ]
+    },
+    "fileList": {
+      "type": "array",
+      "description": "List of files or file configurations to sync to this repository",
+      "items": {
+        "$ref": "#/definitions/fileItem"
+      },
+      "minItems": 1
+    },
+    "group": {
+      "type": "object",
+      "description": "Group configuration for syncing the same files to multiple repositories",
+      "required": [
+        "repos",
+        "files"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "repos": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Newline-separated list of repository names"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/repositoryName"
+              },
+              "description": "Array of repository names"
+            }
+          ],
+          "description": "Target repositories for this group"
+        },
+        "files": {
+          "$ref": "#/definitions/fileList",
+          "description": "Files to sync to all repositories in this group"
+        },
+        "branchSuffix": {
+          "type": "string",
+          "description": "Suffix to append to the PR branch name for this group. Useful when syncing different file sets to the same repository",
+          "examples": [
+            "config",
+            "workflows",
+            "docs"
+          ]
+        },
+        "reviewers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "GitHub usernames to request as reviewers for PRs created for this group. Overrides the global REVIEWERS input",
+          "examples": [
+            [
+              "username1",
+              "username2"
+            ]
+          ]
+        }
+      }
+    },
+    "groupWrapper": {
+      "type": "object",
+      "description": "Wrapper object containing group configuration(s)",
+      "required": ["group"],
+      "additionalProperties": false,
+      "properties": {
+        "group": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/group"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/group"
+              },
+              "minItems": 1
+            }
+          ]
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "owner/repo": [
+        "LICENSE",
+        ".github/workflows/ci.yml"
+      ]
+    },
+    {
+      "owner/repo@main": [
+        {
+          "source": "src/",
+          "dest": "lib/",
+          "deleteOrphaned": true
+        }
+      ]
+    },
+    {
+      "owner/repo": [
+        {
+          "source": "templates/README.md",
+          "dest": "README.md",
+          "template": true
+        }
+      ]
+    },
+    {
+      "owner/repo": [
+        {
+          "source": "templates/config.json",
+          "dest": "config.json",
+          "template": {
+            "appName": "MyApp",
+            "version": "1.0.0"
+          }
+        }
+      ]
+    },
+    {
+      "owner/repo": [
+        {
+          "source": "src/",
+          "dest": "lib/",
+          "exclude": "node_modules\n*.log\n.git"
+        }
+      ]
+    },
+    {
+      "owner/repo": [
+        {
+          "source": "config.json",
+          "dest": "config.json",
+          "replace": false
+        }
+      ]
+    },
+    {
+      "group": {
+        "repos": "owner/repo1\nowner/repo2\nowner/repo3",
+        "files": [
+          "LICENSE",
+          {
+            "source": ".github/workflows/",
+            "dest": ".github/workflows/"
+          }
+        ]
+      }
+    },
+    {
+      "group": [
+        {
+          "repos": [
+            "owner/repo1",
+            "owner/repo2"
+          ],
+          "files": ["LICENSE"],
+          "reviewers": [
+            "reviewer1",
+            "reviewer2"
+          ]
+        },
+        {
+          "repos": ["owner/repo3"],
+          "files": [".gitignore"],
+          "branchSuffix": "gitignore-update"
+        }
+      ]
+    },
+    {
+      "https://github.example.com/owner/repo@main": [
+        "LICENSE"
+      ]
+    }
+  ]
+}

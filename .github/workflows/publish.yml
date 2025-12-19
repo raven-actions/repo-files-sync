@@ -1,0 +1,47 @@
+---
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    if: ${{ !github.event.release.prerelease }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      # - name: Publish
+      #   id: publish
+      #   uses: actions/publish-action@23f4c6f12633a2da8f44938b71fde9afec138fb4 # v0.4.0
+      #   with:
+      #     source-tag: ${{ github.event.release.tag_name }}
+
+      - name: Make Release Latest
+        run: |
+          gh release edit "${RELEASE_TAG}" --latest
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Remove Release Branch
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const { default: script } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/release-branch-remove.mjs`)
+            await script({ context, github, core })
+        env:
+          INPUT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_BRANCH_PREFIX: release

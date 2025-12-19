@@ -1,47 +1,73 @@
 {
-  "name": "repo-file-sync-action",
-  "version": "1.21.1",
+  "name": "repo-files-sync",
   "description": "GitHub Action to keep files like Action workflows or entire directories in sync between multiple repositories.",
-  "main": "dist/index.js",
-  "type": "module",
-  "scripts": {
-    "lint": "eslint ./src",
-    "start": "node src/index.js",
-    "build": "ncc build src/index.js -o dist -m --license licenses.txt"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/betahuhn/repo-file-sync-action.git"
-  },
-  "keywords": [
-    "sync",
-    "file-sync",
-    "workflow-sync",
-    "github-workflow",
-    "github-actions",
-    "github-action-workflow-sync"
+  "version": "0.0.0",
+  "author": "Raven Actions",
+  "bugs": "https://github.com/raven-actions/repo-files-sync/issues",
+  "contributors": [
+    "Maximilian Schiller <schiller@mxis.ch>"
   ],
-  "author": "Maximilian Schiller <schiller@mxis.ch>",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/betahuhn/repo-file-sync-action/issues"
-  },
-  "homepage": "https://github.com/marketplace/actions/repo-file-sync-action",
   "dependencies": {
-    "@actions/core": "^1.10.0",
-    "@actions/github": "^5.1.1",
-    "@octokit/plugin-throttling": "^3.6.2",
-    "@putout/git-status-porcelain": "^1.1.0",
-    "action-input-parser": "^1.2.33",
-    "fs-extra": "^10.1.0",
-    "js-yaml": "^4.1.0",
-    "node-readfiles": "0.2.0",
-    "nunjucks": "^3.2.3"
+    "@actions/core": "^2.0.1",
+    "@actions/github": "^6.0.1",
+    "@octokit/plugin-throttling": "^11.0.3",
+    "fs-extra": "^11.3.3",
+    "js-yaml": "^4.1.1",
+    "minimatch": "^10.1.1",
+    "nunjucks": "^3.2.4"
   },
   "devDependencies": {
-    "@betahuhn/config": "^1.2.0",
-    "@octokit/core": "^3.6.0",
-    "@vercel/ncc": "^0.34.0",
-    "eslint": "^7.32.0"
-  }
+    "@eslint/js": "^9.39.2",
+    "@octokit/core": "^7.0.6",
+    "@octokit/plugin-rest-endpoint-methods": "^17.0.0",
+    "@types/fs-extra": "^11.0.4",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.0.3",
+    "@types/nunjucks": "^3.2.6",
+    "@vitest/coverage-v8": "^4.0.16",
+    "esbuild": "^0.27.2",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.5.0",
+    "prettier": "^3.7.4",
+    "prettier-plugin-multiline-arrays": "^4.1.2",
+    "syncpack": "^13.0.4",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.50.0",
+    "vitest": "^4.0.16"
+  },
+  "files": [
+    "dist/*",
+    "action.yml",
+    "LICENSE",
+    "README.md"
+  ],
+  "homepage": "https://github.com/marketplace/actions/repo-files-sync",
+  "keywords": [
+    "file-sync",
+    "files-sync",
+    "github-action-workflow-sync",
+    "github-actions",
+    "github-workflow",
+    "sync",
+    "workflow-sync"
+  ],
+  "license": "MIT",
+  "main": "dist/index.mjs",
+  "module": "dist/index.mjs",
+  "private": true,
+  "repository": "raven-actions/repo-files-sync.git",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "build:watch": "tsc --watch",
+    "compile": "tsc",
+    "format": "syncpack format && prettier --config ./.github/linters/.prettierrc.yml --write \"./**/*.{js,cjs,mjs,ts,tsx,jsx,json}\"",
+    "lint": "eslint . --config ./.github/linters/eslint.config.mjs",
+    "start": "node dist/index.mjs",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "type": "module"
 }
