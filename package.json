@@ -40,7 +40,8 @@
     "dist/*",
     "action.yml",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "sync.schema.json"
   ],
   "homepage": "https://github.com/marketplace/actions/repo-files-sync",
   "keywords": [
