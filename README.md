@@ -300,8 +300,8 @@ user/repo:
   - source: src/README.md
     template:
       user:
-        name: 'Maxi'
-        handle: '@rave-actions'
+        name: Raven-Actions
+        handle: @raven-actions
 ```
 
 In the source file you can then use these variables like this:
@@ -317,7 +317,7 @@ Result:
 ```yml
 # README.md
 
-Created by Maxi (@rave-actions)
+Created by Raven-Actions (@raven-actions)
 ```
 
 You can also use `extends` with a relative path to inherit other templates. Take a look at Nunjucks [template syntax](https://mozilla.github.io/nunjucks/templating.html) for more info.
@@ -561,7 +561,7 @@ You can tell [repo-files-sync](https://github.com/raven-actions/repo-files-sync)
   uses: raven-actions/repo-files-sync@v1
   with:
     GH_PAT: ${{ secrets.GH_PAT }}
-    ASSIGNEES: rave-actions
+    ASSIGNEES: raven-actions
 ```
 
 ### Request a PR review
@@ -576,8 +576,8 @@ You can tell [repo-files-sync](https://github.com/raven-actions/repo-files-sync)
   with:
     GH_PAT: ${{ secrets.GH_PAT }}
     REVIEWERS: |
-      rave-actions
-      rave-actions-bot
+      raven-actions
+      raven-actions-bot
     TEAM_REVIEWERS: engineering
 ```
 
@@ -689,7 +689,7 @@ with:
 
 ### Advanced sync config
 
-Here's how I keep common files in sync across my repositories. The main repository [`github-files`](https://github.com/rave-actions/github-files) contains all the files I want to sync and the [repo-files-sync](https://github.com/raven-actions/repo-files-sync) Action which runs on every push.
+Here's how I keep common files in sync across my repositories. The main repository [`github-files`](https://github.com/raven-actions/github-files) contains all the files I want to sync and the [repo-files-sync](https://github.com/raven-actions/repo-files-sync) Action which runs on every push.
 
 Using groups I can specify which file(s) should be synced to which repositories:
 
@@ -704,27 +704,27 @@ group:
       - source: workflows/dependencies/dependabot.yml
         dest: .github/workflows/dependabot.yml
     repos: |
-      rave-actions/do-spaces-action
-      rave-actions/running-at
-      rave-actions/spaces-cli
-      rave-actions/metadata-scraper
-      rave-actions/ejs-serve
-      rave-actions/feedback-js
-      rave-actions/drkmd.js
+      raven-actions/do-spaces-action
+      raven-actions/running-at
+      raven-actions/spaces-cli
+      raven-actions/metadata-scraper
+      raven-actions/ejs-serve
+      raven-actions/feedback-js
+      raven-actions/drkmd.js
 
   # GitHub Sponsors config
   - files:
       - source: configs/FUNDING.yml
         dest: .github/FUNDING.yml
     repos: |
-      rave-actions/do-spaces-action
-      rave-actions/running-at
-      rave-actions/spaces-cli
-      rave-actions/qrgen
-      rave-actions/metadata-scraper
-      rave-actions/ejs-serve
-      rave-actions/feedback-js
-      rave-actions/drkmd.js
+      raven-actions/do-spaces-action
+      raven-actions/running-at
+      raven-actions/spaces-cli
+      raven-actions/qrgen
+      raven-actions/metadata-scraper
+      raven-actions/ejs-serve
+      raven-actions/feedback-js
+      raven-actions/drkmd.js
 
   # Semantic release
   - files:
@@ -735,51 +735,51 @@ group:
       - source: configs/release.config.js
         dest: release.config.js
     repos: |
-      rave-actions/do-spaces-action
-      rave-actions/metadata-scraper
-      rave-actions/feedback-js
-      rave-actions/drkmd.js
+      raven-actions/do-spaces-action
+      raven-actions/metadata-scraper
+      raven-actions/feedback-js
+      raven-actions/drkmd.js
 
   # Stale issues workflow
   - files:
       - source: workflows/issues/stale.yml
         dest: .github/workflows/stale.yml
     repos: |
-      rave-actions/do-spaces-action
-      rave-actions/running-at
-      rave-actions/spaces-cli
-      rave-actions/qrgen
-      rave-actions/metadata-scraper
-      rave-actions/ejs-serve
-      rave-actions/feedback-js
-      rave-actions/drkmd.js
+      raven-actions/do-spaces-action
+      raven-actions/running-at
+      raven-actions/spaces-cli
+      raven-actions/qrgen
+      raven-actions/metadata-scraper
+      raven-actions/ejs-serve
+      raven-actions/feedback-js
+      raven-actions/drkmd.js
 
   # Lint CI workflow
   - files:
       - source: workflows/node/lint.yml
         dest: .github/workflows/lint.yml
     repos: |
-      rave-actions/do-spaces-action
-      rave-actions/running-at
-      rave-actions/spaces-cli
-      rave-actions/metadata-scraper
-      rave-actions/ejs-serve
-      rave-actions/feedback-js
-      rave-actions/drkmd.js
+      raven-actions/do-spaces-action
+      raven-actions/running-at
+      raven-actions/spaces-cli
+      raven-actions/metadata-scraper
+      raven-actions/ejs-serve
+      raven-actions/feedback-js
+      raven-actions/drkmd.js
 
   # MIT License
   - files:
       - source: LICENSE
         dest: LICENSE
     repos: |
-      rave-actions/do-spaces-action
-      rave-actions/running-at
-      rave-actions/spaces-cli
-      rave-actions/qrgen
-      rave-actions/metadata-scraper
-      rave-actions/ejs-serve
-      rave-actions/feedback-js
-      rave-actions/drkmd.js
+      raven-actions/do-spaces-action
+      raven-actions/running-at
+      raven-actions/spaces-cli
+      raven-actions/qrgen
+      raven-actions/metadata-scraper
+      raven-actions/ejs-serve
+      raven-actions/feedback-js
+      raven-actions/drkmd.js
 ```
 
 ## 🏗️ Project changes - fork vs source
