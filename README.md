@@ -1,6 +1,6 @@
 # 🔁 Repo Files Sync Action
 
-[![GitHub - marketplace](https://img.shields.io/badge/marketplace-publish--and--tag-blue?logo=github&style=flat-square)](https://github.com/marketplace/actions/repo-files-sync)
+[![GitHub - marketplace](https://img.shields.io/badge/marketplace-repo--files--sync-blue?logo=github&style=flat-square)](https://github.com/marketplace/actions/repo-files-sync)
 [![GitHub - release](https://img.shields.io/github/v/release/raven-actions/repo-files-sync?style=flat-square)](https://github.com/raven-actions/repo-files-sync/releases/latest)
 [![GitHub - ci](https://img.shields.io/github/actions/workflow/status/raven-actions/repo-files-sync/ci.yml?logo=github&label=CI&style=flat-square&branch=main&event=push)](https://github.com/raven-actions/repo-files-sync/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush)
 [![GitHub - license](https://img.shields.io/github/license/raven-actions/repo-files-sync?style=flat-square)](https://github.com/raven-actions/repo-files-sync/blob/main/LICENSE)
@@ -689,7 +689,7 @@ with:
 
 ### Advanced sync config
 
-Here's how I keep common files in sync across my repositories. The main repository [`github-files`](https://github.com/raven-actions/github-files) contains all the files I want to sync and the [repo-files-sync](https://github.com/raven-actions/repo-files-sync) Action which runs on every push.
+Here's how I keep common files in sync across my repositories. The main repository [`raven-actions/.workflows`](https://github.com/raven-actions/.workflows) contains all the files I want to sync and the [repo-files-sync](https://github.com/raven-actions/repo-files-sync) Action which runs on every push.
 
 Using groups I can specify which file(s) should be synced to which repositories:
 
