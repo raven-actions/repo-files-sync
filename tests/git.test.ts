@@ -26,7 +26,7 @@ vi.mock('@actions/github', () => ({
   getOctokit: vi.fn()
 }));
 
-vi.mock('@actions/github/lib/utils.js', () => ({
+vi.mock('@actions/github/lib/utils', () => ({
   GitHub: {
     plugin: vi.fn(() => {
       return class MockOctokit {
