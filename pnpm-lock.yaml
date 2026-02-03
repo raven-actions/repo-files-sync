@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@actions/core':
-        specifier: ^2.0.3
-        version: 2.0.3
+        specifier: ^3.0.0
+        version: 3.0.0
       '@actions/github':
         specifier: ^9.0.0
         version: 9.0.0
@@ -46,14 +46,14 @@ importers:
         specifier: ^4.0.9
         version: 4.0.9
       '@types/node':
-        specifier: ^25.1.0
-        version: 25.1.0
+        specifier: ^25.2.0
+        version: 25.2.0
       '@types/nunjucks':
         specifier: ^3.2.6
         version: 3.2.6
       '@vitest/coverage-v8':
         specifier: ^4.0.18
-        version: 4.0.18(vitest@4.0.18(@types/node@25.1.0))
+        version: 4.0.18(vitest@4.0.18(@types/node@25.2.0))
       esbuild:
         specifier: ^0.27.2
         version: 0.27.2
@@ -64,8 +64,8 @@ importers:
         specifier: ^10.1.8
         version: 10.1.8(eslint@9.39.2)
       globals:
-        specifier: ^17.2.0
-        version: 17.2.0
+        specifier: ^17.3.0
+        version: 17.3.0
       prettier:
         specifier: ^3.8.1
         version: 3.8.1
@@ -83,15 +83,15 @@ importers:
         version: 8.54.0(eslint@9.39.2)(typescript@5.9.3)
       vitest:
         specifier: ^4.0.18
-        version: 4.0.18(@types/node@25.1.0)
+        version: 4.0.18(@types/node@25.2.0)
 
 packages:
 
-  '@actions/core@2.0.3':
-    resolution: {integrity: sha512-Od9Thc3T1mQJYddvVPM4QGiLUewdh+3txmDYHHxoNdkqysR1MbCT+rFOtNUxYAz+7+6RIsqipVahY2GJqGPyxA==}
+  '@actions/core@3.0.0':
+    resolution: {integrity: sha512-zYt6cz+ivnTmiT/ksRVriMBOiuoUpDCJJlZ5KPl2/FRdvwU3f7MPh9qftvbkXJThragzUZieit2nyHUyw53Seg==}
 
-  '@actions/exec@2.0.0':
-    resolution: {integrity: sha512-k8ngrX2voJ/RIN6r9xB82NVqKpnMRtxDoiO+g3olkIUpQNqjArXrCQceduQZCQj3P3xm32pChRLqRrtXTlqhIw==}
+  '@actions/exec@3.0.0':
+    resolution: {integrity: sha512-6xH/puSoNBXb72VPlZVm7vQ+svQpFyA96qdDBvhB8eNZOE8LtPf9L4oAsfzK/crCL8YZ+19fKYVnM63Sl+Xzlw==}
 
   '@actions/github@9.0.0':
     resolution: {integrity: sha512-yJ0RoswsAaKcvkmpCE4XxBRiy/whH2SdTBHWzs0gi4wkqTDhXMChjSdqBz/F4AeiDlP28rQqL33iHb+kjAMX6w==}
@@ -99,8 +99,11 @@ packages:
   '@actions/http-client@3.0.2':
     resolution: {integrity: sha512-JP38FYYpyqvUsz+Igqlc/JG6YO9PaKuvqjM3iGvaLqFnJ7TFmcLyy2IDrY0bI0qCQug8E9K+elv5ZNfw62ZJzA==}
 
-  '@actions/io@2.0.0':
-    resolution: {integrity: sha512-Jv33IN09XLO+0HS79aaODsvIRyduiF7NY/F6LYeK5oeUmrsz7aFdRphQjFoESF4jS7lMauDOttKALcpapVDIAg==}
+  '@actions/http-client@4.0.0':
+    resolution: {integrity: sha512-QuwPsgVMsD6qaPD57GLZi9sqzAZCtiJT8kVBCDpLtxhL5MydQ4gS+DrejtZZPdIYyB1e95uCK9Luyds7ybHI3g==}
+
+  '@actions/io@3.0.2':
+    resolution: {integrity: sha512-nRBchcMM+QK1pdjO7/idu86rbJI5YHUKCvKs0KxnSYbVe3F51UfGxuZX4Qy/fWlp6l7gWFwIkrOzN+oUK03kfw==}
 
   '@augment-vir/assert@31.57.5':
     resolution: {integrity: sha512-+sY0UInumnC2dczu+dt4JJIcMKpRdIM5vTgkZzIFqSTYBAPEcPO/Q29D1xCF29UrDtDkgVeDpttMIdtRF8fSpA==}
@@ -596,8 +599,8 @@ packages:
   '@types/luxon@3.7.1':
     resolution: {integrity: sha512-H3iskjFIAn5SlJU7OuxUmTEpebK6TKB8rxZShDslBMZJ5u9S//KM1sbdAisiSrqwLQncVjnpi2OK2J51h+4lsg==}
 
-  '@types/node@25.1.0':
-    resolution: {integrity: sha512-t7frlewr6+cbx+9Ohpl0NOTKXZNV9xHRmNOvql47BFJKcEG1CxtxlPEEe+gR9uhVWM4DwhnvTF110mIL4yP9RA==}
+  '@types/node@25.2.0':
+    resolution: {integrity: sha512-DZ8VwRFUNzuqJ5khrvwMXHmvPe+zGayJhr2CDNiKB1WBE1ST8Djl00D0IC4vvNmHMdj6DlbYRIaFE7WHjlDl5w==}
 
   '@types/nunjucks@3.2.6':
     resolution: {integrity: sha512-pHiGtf83na1nCzliuAdq8GowYiXvH5l931xZ0YEHaLMNFgynpEqx+IPStlu7UaDkehfvl01e4x/9Tpwhy7Ue3w==}
@@ -1013,8 +1016,8 @@ packages:
     resolution: {integrity: sha512-oahGvuMGQlPw/ivIYBjVSrWAfWLBeku5tpPE2fOPLi+WHffIWbuh2tCjhyQhTBPMf5E9jDEH4FOmTYgYwbKwtQ==}
     engines: {node: '>=18'}
 
-  globals@17.2.0:
-    resolution: {integrity: sha512-tovnCz/fEq+Ripoq+p/gN1u7l6A7wwkoBT9pRCzTHzsD/LvADIzXZdjmRymh5Ztf0DYC3Rwg5cZRYjxzBmzbWg==}
+  globals@17.3.0:
+    resolution: {integrity: sha512-yMqGUQVVCkD4tqjOJf3TnrvaaHDMYp4VlUSObbkIiuCPe/ofdMBFIAcBbCSRFWOnos6qRiTVStDwqPLUclaxIw==}
     engines: {node: '>=18'}
 
   globby@14.1.0:
@@ -1591,14 +1594,14 @@ packages:
 
 snapshots:
 
-  '@actions/core@2.0.3':
+  '@actions/core@3.0.0':
     dependencies:
-      '@actions/exec': 2.0.0
-      '@actions/http-client': 3.0.2
+      '@actions/exec': 3.0.0
+      '@actions/http-client': 4.0.0
 
-  '@actions/exec@2.0.0':
+  '@actions/exec@3.0.0':
     dependencies:
-      '@actions/io': 2.0.0
+      '@actions/io': 3.0.2
 
   '@actions/github@9.0.0':
     dependencies:
@@ -1615,7 +1618,12 @@ snapshots:
       tunnel: 0.0.6
       undici: 6.23.0
 
-  '@actions/io@2.0.0': {}
+  '@actions/http-client@4.0.0':
+    dependencies:
+      tunnel: 0.0.6
+      undici: 6.23.0
+
+  '@actions/io@3.0.2': {}
 
   '@augment-vir/assert@31.57.5':
     dependencies:
@@ -1988,7 +1996,7 @@ snapshots:
   '@types/fs-extra@11.0.4':
     dependencies:
       '@types/jsonfile': 6.1.4
-      '@types/node': 25.1.0
+      '@types/node': 25.2.0
 
   '@types/js-yaml@4.0.9': {}
 
@@ -1996,11 +2004,11 @@ snapshots:
 
   '@types/jsonfile@6.1.4':
     dependencies:
-      '@types/node': 25.1.0
+      '@types/node': 25.2.0
 
   '@types/luxon@3.7.1': {}
 
-  '@types/node@25.1.0':
+  '@types/node@25.2.0':
     dependencies:
       undici-types: 7.16.0
 
@@ -2097,7 +2105,7 @@ snapshots:
       '@typescript-eslint/types': 8.54.0
       eslint-visitor-keys: 4.2.1
 
-  '@vitest/coverage-v8@4.0.18(vitest@4.0.18(@types/node@25.1.0))':
+  '@vitest/coverage-v8@4.0.18(vitest@4.0.18(@types/node@25.2.0))':
     dependencies:
       '@bcoe/v8-coverage': 1.0.2
       '@vitest/utils': 4.0.18
@@ -2109,7 +2117,7 @@ snapshots:
       obug: 2.1.1
       std-env: 3.10.0
       tinyrainbow: 3.0.3
-      vitest: 4.0.18(@types/node@25.1.0)
+      vitest: 4.0.18(@types/node@25.2.0)
 
   '@vitest/expect@4.0.18':
     dependencies:
@@ -2120,13 +2128,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.0.3
 
-  '@vitest/mocker@4.0.18(vite@7.3.1(@types/node@25.1.0))':
+  '@vitest/mocker@4.0.18(vite@7.3.1(@types/node@25.2.0))':
     dependencies:
       '@vitest/spy': 4.0.18
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 7.3.1(@types/node@25.1.0)
+      vite: 7.3.1(@types/node@25.2.0)
 
   '@vitest/pretty-format@4.0.18':
     dependencies:
@@ -2466,7 +2474,7 @@ snapshots:
 
   globals@14.0.0: {}
 
-  globals@17.2.0: {}
+  globals@17.3.0: {}
 
   globby@14.1.0:
     dependencies:
@@ -2918,7 +2926,7 @@ snapshots:
 
   validate-npm-package-name@6.0.2: {}
 
-  vite@7.3.1(@types/node@25.1.0):
+  vite@7.3.1(@types/node@25.2.0):
     dependencies:
       esbuild: 0.27.2
       fdir: 6.5.0(picomatch@4.0.3)
@@ -2927,13 +2935,13 @@ snapshots:
       rollup: 4.56.0
       tinyglobby: 0.2.15
     optionalDependencies:
-      '@types/node': 25.1.0
+      '@types/node': 25.2.0
       fsevents: 2.3.3
 
-  vitest@4.0.18(@types/node@25.1.0):
+  vitest@4.0.18(@types/node@25.2.0):
     dependencies:
       '@vitest/expect': 4.0.18
-      '@vitest/mocker': 4.0.18(vite@7.3.1(@types/node@25.1.0))
+      '@vitest/mocker': 4.0.18(vite@7.3.1(@types/node@25.2.0))
       '@vitest/pretty-format': 4.0.18
       '@vitest/runner': 4.0.18
       '@vitest/snapshot': 4.0.18
@@ -2950,10 +2958,10 @@ snapshots:
       tinyexec: 1.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 3.0.3
-      vite: 7.3.1(@types/node@25.1.0)
+      vite: 7.3.1(@types/node@25.2.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
-      '@types/node': 25.1.0
+      '@types/node': 25.2.0
     transitivePeerDependencies:
       - jiti
       - less
