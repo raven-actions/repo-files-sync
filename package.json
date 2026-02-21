@@ -13,7 +13,7 @@
     "@octokit/plugin-throttling": "^11.0.3",
     "fs-extra": "^11.3.3",
     "js-yaml": "^4.1.1",
-    "minimatch": "^10.1.2",
+    "minimatch": "^10.2.1",
     "nunjucks": "^3.2.4"
   },
   "devDependencies": {
