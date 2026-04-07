@@ -380,12 +380,14 @@ export default class Git {
   }
 
   /**
-   * Gets the commit list in chronological order
+   * Gets the commit list in chronological order.
+   * Uses lastCommitSha as the base so only locally-made commits are returned.
+   * This avoids failures in shallow clones where parent objects of older
+   * commits on an existing PR branch are not available.
    */
   async getCommitsToPush(): Promise<string[]> {
-    const baseRef = SKIP_PR ? `origin/${this.baseBranch}` : this.baseBranch;
-    const output = await execCmd(`git log --format=%H --reverse ${baseRef}..HEAD`, this.workingDir);
-    return output.split('\n');
+    const output = await execCmd(`git log --format=%H --reverse ${this.lastCommitSha}..HEAD`, this.workingDir);
+    return output.split('\n').filter(Boolean);
   }
 
   async getCommitMessage(commitSha: string): Promise<string> {
@@ -495,7 +497,7 @@ export default class Git {
       repo: this.repo.name,
       pull_number: this.existingPr.number,
       body: dedent`
-        ⚠️ This PR is being automatically resynced ⚠️
+        ⚠️ This PR is being automatically resynced (${new Date().toISOString()}) ⚠️
 
         ${this.existingPr.body ?? ''}
       `
@@ -509,7 +511,7 @@ export default class Git {
       owner: this.repo.user,
       repo: this.repo.name,
       pull_number: this.existingPr.number,
-      body: (this.existingPr.body ?? '').replace('⚠️ This PR is being automatically resynced ⚠️', '')
+      body: (this.existingPr.body ?? '').replace(/⚠️ This PR is being automatically resynced \(.*?\) ⚠️/, '')
     });
   }
 
