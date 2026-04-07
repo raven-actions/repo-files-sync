@@ -22,6 +22,8 @@ body = """
   https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}
 {%- endmacro -%}
 
+{%- set repo_url = "https://github.com/" ~ remote.github.owner ~ "/" ~ remote.github.repo -%}
+
 {% if version -%}
     ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
 {% else -%}
@@ -31,7 +33,7 @@ body = """
 {% for group, commits in commits | group_by(attribute="group") %}
     ### {{ group | upper_first }}
     {%- for commit in commits %}
-        - {{ commit.message | split(pat="\n") | first | upper_first | trim }}\
+        - {{ commit.message | split(pat="\n") | first | upper_first | trim | replace(from="<REPO>", to=repo_url) }}\
             {% if commit.remote.username %} by @{{ commit.remote.username }}{%- endif -%}
             {% if commit.remote.pr_number %} in \
             [#{{ commit.remote.pr_number }}]({{ self::remote_url() }}/pull/{{ commit.remote.pr_number }}) \
@@ -106,8 +108,8 @@ split_commits = false
     #{ pattern = '.*', replace_command = 'typos --write-changes -' },
 # ]
 commit_preprocessors = [
-  # Remove issue numbers.
-  { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "([#${2}](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/pull/${2}))" },
+  # Replace issue/PR numbers with links (using <REPO> placeholder resolved by postprocessors).
+  { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "([#${2}](<REPO>/pull/${2}))" },
   # Remove gitmoji, both actual UTF emoji and :emoji:
   { pattern = ' *(:\w+:|[\p{Emoji_Presentation}\p{Extended_Pictographic}](?:\u{FE0F})?\u{200D}?) *', replace = "" },
 ]
