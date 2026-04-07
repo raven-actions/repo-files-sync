@@ -350,4 +350,56 @@ describe('git.ts - edge cases', () => {
       expect(git.workingDir).toContain('unique-repo');
     });
   });
+
+  describe('getCommitsToPush', () => {
+    it('should use lastCommitSha as base ref to avoid shallow clone issues', async () => {
+      const git = new Git();
+      execCmdMock.mockResolvedValue('main');
+
+      await git.initRepo({
+        url: 'https://github.com/test/repo',
+        fullName: 'github.com/test/repo',
+        uniqueName: 'github.com/test/repo@main',
+        host: 'github.com',
+        user: 'test',
+        name: 'repo',
+        branch: 'main'
+      });
+
+      // Simulate lastCommitSha being set (it's set during initRepo via getLastCommitSha)
+      // Now call getCommitsToPush
+      execCmdMock.mockResolvedValueOnce('abc123\ndef456');
+
+      const commits = await (git as unknown as { getCommitsToPush: () => Promise<string[]> }).getCommitsToPush();
+
+      // Verify it uses lastCommitSha (which is 'main' from mock) not baseBranch
+      const logCall = execCmdMock.mock.calls.find((call) =>
+        typeof call[0] === 'string' && call[0].includes('git log --format=%H --reverse')
+      );
+      expect(logCall).toBeDefined();
+      expect(logCall?.[0]).toContain('main..HEAD');
+      expect(commits).toEqual(['abc123', 'def456']);
+    });
+
+    it('should filter empty strings from git log output', async () => {
+      const git = new Git();
+      execCmdMock.mockResolvedValue('main');
+
+      await git.initRepo({
+        url: 'https://github.com/test/repo',
+        fullName: 'github.com/test/repo',
+        uniqueName: 'github.com/test/repo@main',
+        host: 'github.com',
+        user: 'test',
+        name: 'repo',
+        branch: 'main'
+      });
+
+      // Empty output (no new commits)
+      execCmdMock.mockResolvedValueOnce('');
+
+      const commits = await (git as unknown as { getCommitsToPush: () => Promise<string[]> }).getCommitsToPush();
+      expect(commits).toEqual([]);
+    });
+  });
 });
