@@ -515,16 +515,39 @@ export default class Git {
     });
   }
 
+  /**
+   * Gets all files changed between the base branch and HEAD using git diff.
+   * Returns a formatted HTML block listing every changed file in the PR branch.
+   */
+  private async getAllChangedFiles(): Promise<string> {
+    const output = await execCmd(`git diff --name-only ${this.baseBranch}...HEAD`, this.workingDir);
+    const files = output.split('\n').filter(Boolean);
+
+    if (files.length === 0) return '';
+
+    return dedent`
+      <details>
+      <summary>Changed files</summary>
+      <ul>
+      ${files.map((file) => `<li><code>${file}</code></li>`).join('\n')}
+      </ul>
+      </details>
+    `;
+  }
+
   async createOrUpdatePr(changedFiles: string, title?: string): Promise<PullRequestInfo> {
     const branchSuffix = this.prBranchSuffix ? ` (${this.prBranchSuffix})` : '';
     const resolvedTitle = title ?? `${COMMIT_PREFIX} synced file(s) with ${GITHUB_REPOSITORY}${branchSuffix}`;
+
+    // When updating an existing PR, recalculate all changed files from git diff
+    const resolvedChangedFiles = this.existingPr ? await this.getAllChangedFiles() : changedFiles;
 
     const body = dedent`
       synced local file(s) with [${GITHUB_REPOSITORY}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}).
 
       ${PR_BODY}
 
-      ${changedFiles}
+      ${resolvedChangedFiles}
 
       ---
 
