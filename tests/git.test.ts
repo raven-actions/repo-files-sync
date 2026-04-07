@@ -402,4 +402,83 @@ describe('git.ts - edge cases', () => {
       expect(commits).toEqual([]);
     });
   });
+
+  describe('getAllChangedFiles', () => {
+    it('should return all files changed between base branch and HEAD', async () => {
+      const git = new Git();
+      execCmdMock.mockResolvedValue('main');
+
+      await git.initRepo({
+        url: 'https://github.com/test/repo',
+        fullName: 'github.com/test/repo',
+        uniqueName: 'github.com/test/repo@main',
+        host: 'github.com',
+        user: 'test',
+        name: 'repo',
+        branch: 'main'
+      });
+
+      // Mock git diff --name-only output with all changed files
+      execCmdMock.mockResolvedValueOnce('file-a.txt\nfile-b.txt\nfile-c.txt\nfile-d.txt\nfile-e.txt');
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (git as any).getAllChangedFiles();
+
+      expect(result).toContain('file-a.txt');
+      expect(result).toContain('file-b.txt');
+      expect(result).toContain('file-c.txt');
+      expect(result).toContain('file-d.txt');
+      expect(result).toContain('file-e.txt');
+      expect(result).toContain('<details>');
+      expect(result).toContain('Changed files');
+    });
+
+    it('should return empty string when no files changed', async () => {
+      const git = new Git();
+      execCmdMock.mockResolvedValue('main');
+
+      await git.initRepo({
+        url: 'https://github.com/test/repo',
+        fullName: 'github.com/test/repo',
+        uniqueName: 'github.com/test/repo@main',
+        host: 'github.com',
+        user: 'test',
+        name: 'repo',
+        branch: 'main'
+      });
+
+      execCmdMock.mockResolvedValueOnce('');
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (git as any).getAllChangedFiles();
+
+      expect(result).toBe('');
+    });
+
+    it('should use git diff with three-dot notation against base branch', async () => {
+      const git = new Git();
+      execCmdMock.mockResolvedValue('main');
+
+      await git.initRepo({
+        url: 'https://github.com/test/repo',
+        fullName: 'github.com/test/repo',
+        uniqueName: 'github.com/test/repo@main',
+        host: 'github.com',
+        user: 'test',
+        name: 'repo',
+        branch: 'main'
+      });
+
+      execCmdMock.mockResolvedValueOnce('somefile.txt');
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (git as any).getAllChangedFiles();
+
+      const diffCall = execCmdMock.mock.calls.find((call: unknown[]) =>
+        typeof call[0] === 'string' && call[0].includes('git diff --name-only')
+      );
+      expect(diffCall).toBeDefined();
+      expect(diffCall?.[0]).toContain('main...HEAD');
+    });
+  });
 });
