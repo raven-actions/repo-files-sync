@@ -52,7 +52,8 @@ vi.mock('@actions/github/lib/utils', () => ({
             getTree: vi.fn(),
             createTree: vi.fn(),
             createCommit: vi.fn(),
-            updateRef: vi.fn()
+            updateRef: vi.fn(),
+            deleteRef: vi.fn()
           }
         };
       };
@@ -513,6 +514,110 @@ describe('git.ts - edge cases', () => {
       );
       expect(diffCall).toBeDefined();
       expect(diffCall?.[0]).toContain('main...HEAD');
+    });
+  });
+
+  describe('closed PR handling', () => {
+    it('should detect closed unmerged PR and delete remote branch', async () => {
+      const git = new Git();
+      execCmdMock.mockResolvedValue('main');
+
+      await git.initRepo({
+        url: 'https://github.com/test/repo',
+        fullName: 'github.com/test/repo',
+        uniqueName: 'github.com/test/repo@main',
+        host: 'github.com',
+        user: 'test',
+        name: 'repo',
+        branch: 'main'
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const gitAny = git as any;
+
+      // Mock pulls.list to return a closed unmerged PR
+      gitAny.github.pulls.list.mockResolvedValue({
+        data: [{ number: 10, html_url: 'https://github.com/test/repo/pull/10', body: 'old', merged_at: null }]
+      });
+
+      const hasClosed = await git.hasClosedPr();
+      expect(hasClosed).toBe(true);
+    });
+
+    it('should not flag merged PRs as closed', async () => {
+      const git = new Git();
+      execCmdMock.mockResolvedValue('main');
+
+      await git.initRepo({
+        url: 'https://github.com/test/repo',
+        fullName: 'github.com/test/repo',
+        uniqueName: 'github.com/test/repo@main',
+        host: 'github.com',
+        user: 'test',
+        name: 'repo',
+        branch: 'main'
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const gitAny = git as any;
+
+      // Mock pulls.list to return a merged PR
+      gitAny.github.pulls.list.mockResolvedValue({
+        data: [{ number: 10, html_url: 'https://github.com/test/repo/pull/10', body: 'old', merged_at: '2026-01-01T00:00:00Z' }]
+      });
+
+      const hasClosed = await git.hasClosedPr();
+      expect(hasClosed).toBe(false);
+    });
+
+    it('should return false when no closed PRs exist', async () => {
+      const git = new Git();
+      execCmdMock.mockResolvedValue('main');
+
+      await git.initRepo({
+        url: 'https://github.com/test/repo',
+        fullName: 'github.com/test/repo',
+        uniqueName: 'github.com/test/repo@main',
+        host: 'github.com',
+        user: 'test',
+        name: 'repo',
+        branch: 'main'
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const gitAny = git as any;
+
+      gitAny.github.pulls.list.mockResolvedValue({ data: [] });
+
+      const hasClosed = await git.hasClosedPr();
+      expect(hasClosed).toBe(false);
+    });
+
+    it('should call deleteRef when deleting remote branch', async () => {
+      const git = new Git();
+      execCmdMock.mockResolvedValue('main');
+
+      await git.initRepo({
+        url: 'https://github.com/test/repo',
+        fullName: 'github.com/test/repo',
+        uniqueName: 'github.com/test/repo@main',
+        host: 'github.com',
+        user: 'test',
+        name: 'repo',
+        branch: 'main'
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const gitAny = git as any;
+      gitAny.github.git.deleteRef.mockResolvedValue({});
+
+      await git.deleteRemoteBranch('sync/repo/main');
+
+      expect(gitAny.github.git.deleteRef).toHaveBeenCalledWith({
+        owner: 'test',
+        repo: 'repo',
+        ref: 'heads/sync/repo/main'
+      });
     });
   });
 });

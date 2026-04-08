@@ -203,8 +203,18 @@ export default class Git {
       this.remoteBranchHead = undefined;
     }
 
-    // Use git switch to create or switch to branch
-    await execCmd(`git switch "${newBranch}" 2>/dev/null || git switch -c "${newBranch}"`, this.workingDir);
+    // If the remote branch exists but has a closed (unmerged) PR, delete it and start fresh
+    if (this.remoteBranchHead && (await this.hasClosedPr())) {
+      core.info(`Found closed PR for branch ${newBranch}, deleting remote branch to start fresh`);
+      await this.deleteRemoteBranch(newBranch);
+      this.remoteBranchHead = undefined;
+
+      // Create a new local branch from the base branch
+      await execCmd(`git switch -c "${newBranch}"`, this.workingDir);
+    } else {
+      // Use git switch to create or switch to branch
+      await execCmd(`git switch "${newBranch}" 2>/dev/null || git switch -c "${newBranch}"`, this.workingDir);
+    }
 
     await this.getLastCommitSha();
   }
@@ -492,6 +502,31 @@ export default class Git {
       };
     }
     return this.existingPr;
+  }
+
+  async hasClosedPr(): Promise<boolean> {
+    const { data } = await this.github.pulls.list({
+      owner: this.repo.user,
+      repo: this.repo.name,
+      state: 'closed',
+      head: `${FORK ? FORK : this.repo.user}:${this.prBranch}`
+    });
+
+    // Only consider closed PRs that were NOT merged
+    return data.some((pr) => !pr.merged_at);
+  }
+
+  async deleteRemoteBranch(branch: string): Promise<void> {
+    core.debug(`Deleting remote branch ${branch}`);
+    try {
+      await this.github.git.deleteRef({
+        owner: this.repo.user,
+        repo: this.repo.name,
+        ref: `heads/${branch}`
+      });
+    } catch (error) {
+      core.debug(`Failed to delete remote branch ${branch}: ${String(error)}`);
+    }
   }
 
   async setPrWarning(): Promise<void> {
