@@ -325,6 +325,11 @@ export default class Git {
     return statusOutput.trim().length > 0;
   }
 
+  async hasStagedChanges(): Promise<boolean> {
+    const output = await execCmd(`git diff --cached --name-only`, this.workingDir);
+    return output.trim().length > 0;
+  }
+
   async commit(msg?: string): Promise<string> {
     let message = msg ?? `${COMMIT_PREFIX} synced file(s) with ${GITHUB_REPOSITORY}`;
 

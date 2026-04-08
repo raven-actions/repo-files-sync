@@ -218,6 +218,40 @@ describe('git.ts - Git class', () => {
     });
   });
 
+  describe('hasStagedChanges', () => {
+    beforeEach(async () => {
+      execCmdMock.mockResolvedValue('main');
+      await git.initRepo(mockRepoInfo);
+    });
+
+    it('should return true when there are staged changes', async () => {
+      execCmdMock.mockResolvedValueOnce('LICENSE\nREADME.md');
+
+      const result = await git.hasStagedChanges();
+      expect(result).toBe(true);
+
+      expect(execCmdMock).toHaveBeenCalledWith(
+        'git diff --cached --name-only',
+        expect.any(String)
+      );
+    });
+
+    it('should return false when there are no staged changes', async () => {
+      execCmdMock.mockResolvedValueOnce('');
+
+      const result = await git.hasStagedChanges();
+      expect(result).toBe(false);
+    });
+
+    it('should return false when only unstaged changes exist', async () => {
+      // git diff --cached --name-only returns empty when changes are unstaged
+      execCmdMock.mockResolvedValueOnce('');
+
+      const result = await git.hasStagedChanges();
+      expect(result).toBe(false);
+    });
+  });
+
   describe('cleanupRepo', () => {
     beforeEach(async () => {
       execCmdMock.mockResolvedValue('main');

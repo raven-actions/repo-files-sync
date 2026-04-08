@@ -77,7 +77,7 @@ async function processFile(
 
   // Commit each file separately, if option is set to false commit all files at once later
   if (COMMIT_EACH_FILE) {
-    const hasChanges = await git.hasChanges();
+    const hasChanges = await git.hasStagedChanges();
 
     if (!hasChanges) {
       core.debug('File(s) already up to date');
