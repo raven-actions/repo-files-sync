@@ -29,12 +29,12 @@ jobs:
           persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+        uses: pnpm/action-setup@903f9c1a6ebcba6cf41d87230be49611ac97822e # v6.0.3
         with:
           version: 10
 
       - name: Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version-file: .node-version
           cache: pnpm
@@ -46,7 +46,7 @@ jobs:
         run: pnpm build
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist
           path: dist/
@@ -66,7 +66,7 @@ jobs:
 
       - name: Get release details
         id: release-details
-        uses: orhun/git-cliff-action@c93ef52f3d0ddcdcc9bd5447d98d458a11cd4f72 # v4.7.1
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4.8.0
         with:
           config: .github/cliff.toml
           args: --github-repo "${{ github.repository }}" --unreleased --bump --strip header
@@ -79,7 +79,7 @@ jobs:
 
       - name: Prepare Release Branch
         id: release-branch
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { default: script } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/release-branch-create.mjs`)
@@ -95,7 +95,7 @@ jobs:
             .github/workflows/publish.yml
 
       - name: Delete existing draft prerelease
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const tag = core.getInput('TAG', { required: true })
@@ -111,7 +111,7 @@ jobs:
           INPUT_TAG: ${{ steps.release-details.outputs.version }}
 
       - name: Create Draft Prerelease
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           tag_name: ${{ steps.release-details.outputs.version }}
           name: ${{ steps.release-details.outputs.version }}
