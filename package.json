@@ -57,7 +57,7 @@
   "main": "dist/index.mjs",
   "module": "dist/index.mjs",
   "private": true,
-  "repository": "raven-actions/repo-files-sync.git",
+  "repository": "raven-actions/repo-files-sync",
   "scripts": {
     "build": "node esbuild.config.mjs",
     "build:watch": "tsc --watch",

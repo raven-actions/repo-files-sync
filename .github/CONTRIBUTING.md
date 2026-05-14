@@ -9,7 +9,7 @@ The actual source code of this library is in the `src` folder.
 ### Prerequisites
 
 - Node.js 24+
-- [pnpm](https://pnpm.io/) (recommended version: 10+)
+- [pnpm](https://pnpm.io/) (recommended version: 11+)
 
 ### Scripts
 
