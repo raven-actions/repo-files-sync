@@ -22,7 +22,7 @@
     "@octokit/plugin-rest-endpoint-methods": "^17.0.0",
     "@types/fs-extra": "^11.0.4",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^25.7.0",
+    "@types/node": "^25.8.0",
     "@types/nunjucks": "^3.2.6",
     "@vitest/coverage-v8": "^4.1.6",
     "esbuild": "^0.28.0",
