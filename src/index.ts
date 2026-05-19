@@ -149,7 +149,8 @@ async function processRepo(git: Git, item: RepoConfig): Promise<string | undefin
       existingPr = OVERWRITE_EXISTING_PR ? await git.findExistingPr() : undefined;
 
       if (existingPr && !DRY_RUN) {
-        core.info(`Found existing PR: ${existingPr.number} - ${existingPr.html_url}\n\n`);
+        core.info(`Found existing PR: ${existingPr.number} - ${existingPr.html_url}`);
+        core.info(' ');
         await git.setPrWarning();
       }
     }
