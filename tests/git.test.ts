@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as os from 'os';
 
 // Hoist mocks to be available before module imports
-const { execCmdMock, removeMock } = vi.hoisted(() => ({
+const { execCmdMock, execGitMock, removeMock } = vi.hoisted(() => ({
   execCmdMock: vi.fn().mockResolvedValue(''),
+  execGitMock: vi.fn().mockResolvedValue(''),
   removeMock: vi.fn().mockResolvedValue(undefined)
 }));
 
@@ -40,6 +41,7 @@ vi.mock('@actions/github/lib/utils', () => ({
           },
           pulls: {
             list: vi.fn().mockResolvedValue({ data: [] }),
+            listFiles: vi.fn().mockResolvedValue({ data: [] }),
             create: vi.fn().mockResolvedValue({ data: { number: 1, html_url: 'https://github.com/test/repo/pull/1' } }),
             update: vi.fn()
           },
@@ -94,6 +96,7 @@ vi.mock('../src/helpers.js', () => ({
     return strings.reduce((acc, str, i) => acc + str + (values[i] ?? ''), '');
   }),
   execCmd: execCmdMock,
+  execGit: execGitMock,
   remove: removeMock
 }));
 
@@ -250,6 +253,22 @@ describe('git.ts - Git class', () => {
 
       const result = await git.hasStagedChanges();
       expect(result).toBe(false);
+    });
+  });
+
+  describe('commit', () => {
+    beforeEach(async () => {
+      execCmdMock.mockResolvedValue('main');
+      await git.initRepo(mockRepoInfo);
+    });
+
+    it('should commit using git arguments so shell metacharacters are safe', async () => {
+      const message = "chore(sync): synced file(s) with radius-project/.github's workflows";
+
+      await git.commit(message);
+
+      expect(execGitMock).toHaveBeenCalledWith(['commit', '-m', message], expect.any(String));
+      expect(execCmdMock).not.toHaveBeenCalledWith(expect.stringContaining('git commit'), expect.any(String));
     });
   });
 
@@ -439,7 +458,7 @@ describe('git.ts - edge cases', () => {
   });
 
   describe('getAllChangedFiles', () => {
-    it('should return all files changed between base branch and HEAD', async () => {
+    it('should return all files changed in the existing pull request', async () => {
       const git = new Git();
       execCmdMock.mockResolvedValue('main');
 
@@ -453,8 +472,18 @@ describe('git.ts - edge cases', () => {
         branch: 'main'
       });
 
-      // Mock git diff --name-only output with all changed files
-      execCmdMock.mockResolvedValueOnce('file-a.txt\nfile-b.txt\nfile-c.txt\nfile-d.txt\nfile-e.txt');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const gitAny = git as any;
+      gitAny.existingPr = { number: 5, html_url: 'https://github.com/test/repo/pull/5', body: null };
+      gitAny.github.pulls.listFiles.mockResolvedValueOnce({
+        data: [
+          { filename: 'file-a.txt' },
+          { filename: 'file-b.txt' },
+          { filename: 'file-c.txt' },
+          { filename: 'file-d.txt' },
+          { filename: 'file-e.txt' }
+        ]
+      });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await (git as any).getAllChangedFiles();
@@ -466,6 +495,13 @@ describe('git.ts - edge cases', () => {
       expect(result).toContain('file-e.txt');
       expect(result).toContain('<details>');
       expect(result).toContain('Changed files');
+      expect(gitAny.github.pulls.listFiles).toHaveBeenCalledWith({
+        owner: 'test',
+        repo: 'repo',
+        pull_number: 5,
+        per_page: 100,
+        page: 1
+      });
     });
 
     it('should return empty string when no files changed', async () => {
@@ -482,7 +518,10 @@ describe('git.ts - edge cases', () => {
         branch: 'main'
       });
 
-      execCmdMock.mockResolvedValueOnce('');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const gitAny = git as any;
+      gitAny.existingPr = { number: 5, html_url: 'https://github.com/test/repo/pull/5', body: null };
+      gitAny.github.pulls.listFiles.mockResolvedValueOnce({ data: [] });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await (git as any).getAllChangedFiles();
@@ -490,7 +529,7 @@ describe('git.ts - edge cases', () => {
       expect(result).toBe('');
     });
 
-    it('should use git diff with three-dot notation against base branch', async () => {
+    it('should paginate pull request files', async () => {
       const git = new Git();
       execCmdMock.mockResolvedValue('main');
 
@@ -504,16 +543,19 @@ describe('git.ts - edge cases', () => {
         branch: 'main'
       });
 
-      execCmdMock.mockResolvedValueOnce('somefile.txt');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const gitAny = git as any;
+      gitAny.existingPr = { number: 5, html_url: 'https://github.com/test/repo/pull/5', body: null };
+      gitAny.github.pulls.listFiles
+        .mockResolvedValueOnce({ data: Array.from({ length: 100 }, (_, index) => ({ filename: `file-${index}.txt` })) })
+        .mockResolvedValueOnce({ data: [{ filename: 'last-file.txt' }] });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (git as any).getAllChangedFiles();
+      const result = await (git as any).getAllChangedFiles();
 
-      const diffCall = execCmdMock.mock.calls.find((call: unknown[]) =>
-        typeof call[0] === 'string' && call[0].includes('git diff --name-only')
-      );
-      expect(diffCall).toBeDefined();
-      expect(diffCall?.[0]).toContain('main...HEAD');
+      expect(result).toContain('file-0.txt');
+      expect(result).toContain('last-file.txt');
+      expect(gitAny.github.pulls.listFiles).toHaveBeenCalledTimes(2);
     });
   });
 

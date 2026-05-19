@@ -5,7 +5,7 @@ import { throttling } from '@octokit/plugin-throttling';
 import * as path from 'path';
 
 import config from './config.js';
-import { dedent, execCmd, remove } from './helpers.js';
+import { dedent, execCmd, execGit, remove } from './helpers.js';
 
 import type { RepoInfo, TreeDiffEntry, GitDiffDict } from './types.js';
 
@@ -347,7 +347,7 @@ export default class Git {
       message += `\n\n${COMMIT_BODY}`;
     }
 
-    return execCmd(`git commit -m '${message.replace(/'/g, "'\\''")}'`, this.workingDir);
+    return execGit(['commit', '-m', message], this.workingDir);
   }
 
   /**
@@ -556,12 +556,29 @@ export default class Git {
   }
 
   /**
-   * Gets all files changed between the base branch and HEAD using git diff.
+   * Gets all files changed in the existing pull request.
    * Returns a formatted HTML block listing every changed file in the PR branch.
    */
   private async getAllChangedFiles(): Promise<string> {
-    const output = await execCmd(`git diff --name-only ${this.baseBranch}...HEAD`, this.workingDir);
-    const files = output.split('\n').filter(Boolean);
+    if (!this.existingPr) return '';
+
+    const files: string[] = [];
+    let page = 1;
+
+    while (true) {
+      const { data } = await this.github.pulls.listFiles({
+        owner: this.repo.user,
+        repo: this.repo.name,
+        pull_number: this.existingPr.number,
+        per_page: 100,
+        page
+      });
+
+      files.push(...data.map((file) => file.filename));
+
+      if (data.length < 100) break;
+      page += 1;
+    }
 
     if (files.length === 0) return '';
 

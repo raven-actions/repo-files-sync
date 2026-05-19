@@ -1,6 +1,6 @@
 import fs from 'fs-extra';
 import { readdir } from 'fs/promises';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import * as core from '@actions/core';
 import * as path from 'path';
 import nunjucks from 'nunjucks';
@@ -115,6 +115,32 @@ export function execCmd(command: string, workingDir?: string, trimResult = true)
   return new Promise((resolve, reject) => {
     exec(
       command,
+      {
+        cwd: workingDir,
+        maxBuffer: 1024 * 1024 * 20
+      },
+      (error, stdout) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(trimResult ? stdout.trim() : stdout);
+        }
+      }
+    );
+  });
+}
+
+/**
+ * Execute a git command without shell interpolation and return the output
+ */
+export function execGit(args: string[], workingDir?: string, trimResult = true): Promise<string> {
+  const printableArgs = args.map((arg) => JSON.stringify(arg)).join(' ');
+  core.debug(`EXEC: "git ${printableArgs}" IN ${workingDir ?? 'default'}`);
+
+  return new Promise((resolve, reject) => {
+    execFile(
+      'git',
+      args,
       {
         cwd: workingDir,
         maxBuffer: 1024 * 1024 * 20
