@@ -34,6 +34,12 @@ inputs:
       Labels to add to the pull request.
       Defaults to `sync`. Set to `false` to disable.
     required: false
+  PR_TITLE:
+    description: |
+      Custom title for the pull request.
+      When set, it overrides the auto-generated title and COMMIT_AS_PR_TITLE.
+      Defaults to an empty string (auto-generated title).
+    required: false
   PR_BODY:
     description: |
       Additional content to add in the PR description.

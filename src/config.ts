@@ -39,6 +39,7 @@ function initializeContext(): ConfigContext {
     COMMIT_PREFIX: getOptionalInput('COMMIT_PREFIX', '🔄'),
     COMMIT_EACH_FILE: getBooleanInput('COMMIT_EACH_FILE', true),
     PR_LABELS: getDisableableArrayInput('PR_LABELS', ['sync']),
+    PR_TITLE: getOptionalInput('PR_TITLE', ''),
     PR_BODY: getOptionalInput('PR_BODY', ''),
     ASSIGNEES: getArrayInput('ASSIGNEES'),
     REVIEWERS: getArrayInput('REVIEWERS'),

@@ -65,6 +65,7 @@ export interface ConfigContext {
   COMMIT_PREFIX: string;
   COMMIT_EACH_FILE: boolean;
   PR_LABELS: string[] | undefined;
+  PR_TITLE: string;
   PR_BODY: string;
   ASSIGNEES: string[] | undefined;
   REVIEWERS: string[] | undefined;
