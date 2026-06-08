@@ -108,6 +108,18 @@ uses: raven-actions/repo-files-sync@v1
 
 With the `v1` tag you will always get the latest non-breaking version which will include potential bug fixes in the future. If you use a specific version, make sure to regularly check if a new version is available, or enable Dependabot.
 
+### Verifying the integrity of a release
+
+Every published build ships with a signed [build provenance attestation](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds), so you can cryptographically verify that the `dist/index.mjs` you run was built by this repository's CI and has not been tampered with.
+
+After checking out the action (or downloading `dist/index.mjs` from a release tag), verify it with the [GitHub CLI](https://cli.github.com/):
+
+```bash
+gh attestation verify dist/index.mjs --repo raven-actions/repo-files-sync
+```
+
+When [immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases) are enabled on the repository, each published release additionally receives a signed release attestation and its tag and assets are locked against tampering. See [Verifying the integrity of a release](https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/verifying-the-integrity-of-a-release) for more details.
+
 ## ⚙️ Action Inputs
 
 Here are all the inputs [repo-files-sync](https://github.com/raven-actions/repo-files-sync) takes:

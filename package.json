@@ -56,6 +56,7 @@
   "license": "MIT",
   "main": "dist/index.mjs",
   "module": "dist/index.mjs",
+  "packageManager": "pnpm@11.3.0",
   "private": true,
   "repository": "raven-actions/repo-files-sync",
   "scripts": {
