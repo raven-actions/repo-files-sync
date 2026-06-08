@@ -11,6 +11,7 @@ const {
   COMMIT_EACH_FILE,
   COMMIT_PREFIX,
   PR_LABELS,
+  PR_TITLE,
   ASSIGNEES,
   DRY_RUN,
   TMP_DIR,
@@ -227,7 +228,8 @@ async function processRepo(git: Git, item: RepoConfig): Promise<string | undefin
       const useCommitAsPRTitle =
         COMMIT_AS_PR_TITLE && modified.length === 1 && firstModified?.useOriginalMessage === true;
 
-      const prTitle = useCommitAsPRTitle ? firstModified?.commitMessage?.split('\n', 1)[0]?.trim() : undefined;
+      const prTitle =
+        PR_TITLE || (useCommitAsPRTitle ? firstModified?.commitMessage?.split('\n', 1)[0]?.trim() : undefined);
 
       const pullRequest = await git.createOrUpdatePr(COMMIT_EACH_FILE ? changedFiles : '', prTitle);
 
