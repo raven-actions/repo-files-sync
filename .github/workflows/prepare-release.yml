@@ -1,0 +1,103 @@
+# yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
+---
+name: Prepare Release
+
+# Manually-triggered workflow that opens the final-release pull request.
+#
+# It computes the next stable version and the FULL release notes since the last
+# final release, updates CHANGELOG.md, and opens a PR titled
+# `chore(release): vX.Y.Z`. Merging that PR triggers publish.yml, which tags the
+# final release at the exact commit of the last release candidate (see the
+# `prerelease/vX.Y.Z` branch). Cut at least one RC (merge to main) before running.
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write # create the release-prep branch + verified changelog commit
+      pull-requests: write # open/update the release PR
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Full notes since the last FINAL release (cliff.toml tag_pattern matches
+      # only stable vX.Y.Z, so RC tags are ignored and the range spans the whole
+      # development cycle). --bump also yields the target version.
+      - name: Compute version and full release notes
+        id: notes
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4.8.0
+        with:
+          config: .github/cliff.toml
+          args: --github-repo "${{ github.repository }}" --unreleased --bump --strip header
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      # The final release reuses the last RC's curated commit, so a matching
+      # prerelease/<version> branch must exist. Fail early with guidance if not.
+      - name: Verify a release candidate exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.notes.outputs.version }}
+        run: |
+          latest="$(git tag --list --sort=-v:refname \
+            | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || true)"
+          if [ -n "${latest}" ] && [ "${VERSION#v}" = "${latest#v}" ]; then
+            echo "::error::Nothing to release: computed version ${VERSION} equals the latest release ${latest}."
+            exit 1
+          fi
+          if ! gh api "repos/${GITHUB_REPOSITORY}/git/refs/heads/prerelease/${VERSION}" >/dev/null 2>&1; then
+            echo "::error::No release candidate branch prerelease/${VERSION}. Merge changes to main and let an RC build first."
+            exit 1
+          fi
+          echo "Release candidate branch prerelease/${VERSION} found."
+
+      # Regenerate the full CHANGELOG.md file (all releases + the bumped one).
+      - name: Generate CHANGELOG.md
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4.8.0
+        with:
+          config: .github/cliff.toml
+          args: --github-repo "${{ github.repository }}" --bump
+        env:
+          OUTPUT: CHANGELOG.md
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Open release PR
+        id: pr
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { default: script } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/release-pr-create.mjs`)
+            await script({ context, github, core })
+        env:
+          INPUT_VERSION: ${{ steps.notes.outputs.version }}
+          INPUT_NOTES: ${{ steps.notes.outputs.content }}
+          INPUT_FILE: CHANGELOG.md
+          INPUT_BRANCH_PREFIX: release-prep
+
+      - name: Summary
+        env:
+          VERSION: ${{ steps.notes.outputs.version }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+        run: |
+          {
+            echo "## Release prepared"
+            echo ""
+            echo "- Version: \`${VERSION}\`"
+            echo "- Release PR: ${PR_URL}"
+            echo ""
+            echo "Merge the PR to publish the final release at the last RC commit."
+          } >> "$GITHUB_STEP_SUMMARY"
