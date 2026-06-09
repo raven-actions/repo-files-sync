@@ -3,7 +3,11 @@
 [bump]
 features_always_bump_minor = true
 breaking_always_bump_major = true
-initial_tag = "0.1.0"
+# Keep the `v` prefix: every tag in this repo is `vX.Y.Z` (and `vX.Y.Z-rc.N`),
+# so the bumped version git-cliff emits must match (e.g. `v0.1.0`). Without it
+# the RC tag computation can't find the existing `v*-rc.*` tags and the prefix
+# of newly created tags would diverge from the established convention.
+initial_tag = "v0.1.0"
 
 [changelog]
 # A Tera template to be rendered as the changelog's header.
