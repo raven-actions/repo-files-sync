@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
 ---
 name: PR Title
 
@@ -22,6 +23,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       pull-requests: read
+      statuses: write
     steps:
       # The PR title becomes the squash-merge commit subject, which feeds
       # git-cliff's conventional-commit parsing in the prerelease workflow.
