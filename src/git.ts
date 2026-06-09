@@ -186,14 +186,16 @@ export default class Git {
 
       core.debug(`Creating PR Branch ${newBranch}`);
 
-      await execCmd(`git switch -c "${newBranch}"`, this.workingDir);
+      await execGit(['switch', '-c', newBranch], this.workingDir);
       return;
     }
 
     core.debug(`Switch/Create PR Branch ${newBranch}`);
 
-    // Fetch all branches
-    await execCmd(`git remote set-branches origin '*'`, this.workingDir);
+    // Fetch all branches.
+    // Use execGit (no shell) so the `*` refspec isn't mangled by cmd.exe on Windows
+    // runners, where single quotes are not stripped.
+    await execGit(['remote', 'set-branches', 'origin', '*'], this.workingDir);
     await execCmd(`git fetch -v --depth=1`, this.workingDir);
 
     try {
@@ -210,10 +212,16 @@ export default class Git {
       this.remoteBranchHead = undefined;
 
       // Create a new local branch from the base branch
-      await execCmd(`git switch -c "${newBranch}"`, this.workingDir);
+      await execGit(['switch', '-c', newBranch], this.workingDir);
     } else {
-      // Use git switch to create or switch to branch
-      await execCmd(`git switch "${newBranch}" 2>/dev/null || git switch -c "${newBranch}"`, this.workingDir);
+      // Switch to the existing branch, or create it if it doesn't exist locally.
+      // Use execGit (no shell) instead of `2>/dev/null || ...`, which is POSIX-only
+      // and breaks on Windows runners (cmd.exe has no /dev/null).
+      try {
+        await execGit(['switch', newBranch], this.workingDir);
+      } catch {
+        await execGit(['switch', '-c', newBranch], this.workingDir);
+      }
     }
 
     await this.getLastCommitSha();

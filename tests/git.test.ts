@@ -173,8 +173,8 @@ describe('git.ts - Git class', () => {
     it('should create branch with default naming', async () => {
       await git.createPrBranch();
 
-      expect(execCmdMock).toHaveBeenCalledWith(
-        expect.stringContaining('git switch'),
+      expect(execGitMock).toHaveBeenCalledWith(
+        ['switch', expect.stringContaining('main')],
         expect.any(String)
       );
     });
@@ -183,8 +183,8 @@ describe('git.ts - Git class', () => {
       await git.createPrBranch('custom-suffix');
 
       // Should include the suffix in the branch name
-      expect(execCmdMock).toHaveBeenCalledWith(
-        expect.stringMatching(/git switch.*custom-suffix/),
+      expect(execGitMock).toHaveBeenCalledWith(
+        ['switch', expect.stringContaining('custom-suffix')],
         expect.any(String)
       );
     });
@@ -294,8 +294,8 @@ describe('git.ts - Git class', () => {
     it('should fetch all branches when creating PR branch with overwrite', async () => {
       await git.createPrBranch();
 
-      expect(execCmdMock).toHaveBeenCalledWith(
-        "git remote set-branches origin '*'",
+      expect(execGitMock).toHaveBeenCalledWith(
+        ['remote', 'set-branches', 'origin', '*'],
         expect.any(String)
       );
 
