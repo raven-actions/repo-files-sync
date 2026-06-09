@@ -171,10 +171,15 @@ async function processRepo(git: Git, item: RepoConfig): Promise<string | undefin
       return undefined;
     }
 
-    const hasChanges = await git.hasChanges();
+    // Only consider staged changes here. `git commit` (without `-a`) commits the
+    // index only, so guarding on the full working-tree status (`git status
+    // --porcelain`, which also reports unstaged/untracked noise such as
+    // `.gitattributes` line-ending renormalization) can attempt an empty commit
+    // that fails with "nothing to commit".
+    const hasStagedChanges = await git.hasStagedChanges();
 
-    // If no changes left and nothing was modified, nothing has changed
-    if (!hasChanges && modified.length < 1) {
+    // If nothing is staged and nothing was committed per-file, nothing has changed
+    if (!hasStagedChanges && modified.length < 1) {
       core.info('File(s) already up to date');
 
       if (existingPr) {
@@ -184,8 +189,8 @@ async function processRepo(git: Git, item: RepoConfig): Promise<string | undefin
       return undefined;
     }
 
-    // If there are still local changes left, commit them before pushing
-    if (hasChanges) {
+    // If there are still staged changes left, commit them before pushing
+    if (hasStagedChanges) {
       core.debug('Creating commit for remaining files');
 
       let useOriginalCommitMessage = ORIGINAL_MESSAGE && git.isOneCommitPush();

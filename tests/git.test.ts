@@ -2,8 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as os from 'os';
 
 // Hoist mocks to be available before module imports
-const { execCmdMock, execGitMock, removeMock } = vi.hoisted(() => ({
-  execCmdMock: vi.fn().mockResolvedValue(''),
+const { execGitMock, removeMock } = vi.hoisted(() => ({
   execGitMock: vi.fn().mockResolvedValue(''),
   removeMock: vi.fn().mockResolvedValue(undefined)
 }));
@@ -95,7 +94,6 @@ vi.mock('../src/helpers.js', () => ({
     if (typeof strings === 'string') return strings;
     return strings.reduce((acc, str, i) => acc + str + (values[i] ?? ''), '');
   }),
-  execCmd: execCmdMock,
   execGit: execGitMock,
   remove: removeMock
 }));
@@ -129,7 +127,7 @@ describe('git.ts - Git class', () => {
 
   describe('initRepo', () => {
     it('should initialize repository with correct working directory', async () => {
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
 
       await git.initRepo(mockRepoInfo);
 
@@ -140,25 +138,25 @@ describe('git.ts - Git class', () => {
     });
 
     it('should call clone during init', async () => {
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
 
       await git.initRepo(mockRepoInfo);
 
-      // Clone is called with the full command including path
-      const cloneCall = execCmdMock.mock.calls.find((call) =>
-        typeof call[0] === 'string' && call[0].includes('git clone')
+      // Clone is invoked with git args (no shell) starting with the clone subcommand
+      const cloneCall = execGitMock.mock.calls.find(
+        (call) => Array.isArray(call[0]) && call[0][0] === 'clone'
       );
       expect(cloneCall).toBeDefined();
-      expect(cloneCall?.[0]).toContain('git clone');
+      expect(cloneCall?.[0]).toContain('clone');
     });
 
     it('should set git identity during init', async () => {
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
 
       await git.initRepo(mockRepoInfo);
 
-      expect(execCmdMock).toHaveBeenCalledWith(
-        expect.stringContaining('git config --local user.name'),
+      expect(execGitMock).toHaveBeenCalledWith(
+        expect.arrayContaining(['config', '--local', 'user.name']),
         expect.any(String)
       );
     });
@@ -166,15 +164,15 @@ describe('git.ts - Git class', () => {
 
   describe('createPrBranch', () => {
     beforeEach(async () => {
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
       await git.initRepo(mockRepoInfo);
     });
 
     it('should create branch with default naming', async () => {
       await git.createPrBranch();
 
-      expect(execCmdMock).toHaveBeenCalledWith(
-        expect.stringContaining('git switch'),
+      expect(execGitMock).toHaveBeenCalledWith(
+        ['switch', expect.stringContaining('main')],
         expect.any(String)
       );
     });
@@ -183,8 +181,8 @@ describe('git.ts - Git class', () => {
       await git.createPrBranch('custom-suffix');
 
       // Should include the suffix in the branch name
-      expect(execCmdMock).toHaveBeenCalledWith(
-        expect.stringMatching(/git switch.*custom-suffix/),
+      expect(execGitMock).toHaveBeenCalledWith(
+        ['switch', expect.stringContaining('custom-suffix')],
         expect.any(String)
       );
     });
@@ -192,15 +190,15 @@ describe('git.ts - Git class', () => {
 
   describe('add', () => {
     beforeEach(async () => {
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
       await git.initRepo(mockRepoInfo);
     });
 
     it('should add file to staging', async () => {
       await git.add('test-file.txt');
 
-      expect(execCmdMock).toHaveBeenCalledWith(
-        'git add -f "test-file.txt"',
+      expect(execGitMock).toHaveBeenCalledWith(
+        ['add', '-f', 'test-file.txt'],
         expect.any(String)
       );
     });
@@ -208,15 +206,15 @@ describe('git.ts - Git class', () => {
 
   describe('remove', () => {
     beforeEach(async () => {
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
       await git.initRepo(mockRepoInfo);
     });
 
     it('should remove file from repo', async () => {
       await git.remove('test-file.txt');
 
-      expect(execCmdMock).toHaveBeenCalledWith(
-        'git rm -f "test-file.txt"',
+      expect(execGitMock).toHaveBeenCalledWith(
+        ['rm', '-f', 'test-file.txt'],
         expect.any(String)
       );
     });
@@ -224,24 +222,24 @@ describe('git.ts - Git class', () => {
 
   describe('hasStagedChanges', () => {
     beforeEach(async () => {
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
       await git.initRepo(mockRepoInfo);
     });
 
     it('should return true when there are staged changes', async () => {
-      execCmdMock.mockResolvedValueOnce('LICENSE\nREADME.md');
+      execGitMock.mockResolvedValueOnce('LICENSE\nREADME.md');
 
       const result = await git.hasStagedChanges();
       expect(result).toBe(true);
 
-      expect(execCmdMock).toHaveBeenCalledWith(
-        'git diff --cached --name-only',
+      expect(execGitMock).toHaveBeenCalledWith(
+        ['diff', '--cached', '--name-only'],
         expect.any(String)
       );
     });
 
     it('should return false when there are no staged changes', async () => {
-      execCmdMock.mockResolvedValueOnce('');
+      execGitMock.mockResolvedValueOnce('');
 
       const result = await git.hasStagedChanges();
       expect(result).toBe(false);
@@ -249,7 +247,7 @@ describe('git.ts - Git class', () => {
 
     it('should return false when only unstaged changes exist', async () => {
       // git diff --cached --name-only returns empty when changes are unstaged
-      execCmdMock.mockResolvedValueOnce('');
+      execGitMock.mockResolvedValueOnce('');
 
       const result = await git.hasStagedChanges();
       expect(result).toBe(false);
@@ -258,7 +256,7 @@ describe('git.ts - Git class', () => {
 
   describe('commit', () => {
     beforeEach(async () => {
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
       await git.initRepo(mockRepoInfo);
     });
 
@@ -268,13 +266,12 @@ describe('git.ts - Git class', () => {
       await git.commit(message);
 
       expect(execGitMock).toHaveBeenCalledWith(['commit', '-m', message], expect.any(String));
-      expect(execCmdMock).not.toHaveBeenCalledWith(expect.stringContaining('git commit'), expect.any(String));
     });
   });
 
   describe('cleanupRepo', () => {
     beforeEach(async () => {
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
       await git.initRepo(mockRepoInfo);
     });
 
@@ -287,20 +284,20 @@ describe('git.ts - Git class', () => {
 
   describe('branch operations', () => {
     beforeEach(async () => {
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
       await git.initRepo(mockRepoInfo);
     });
 
     it('should fetch all branches when creating PR branch with overwrite', async () => {
       await git.createPrBranch();
 
-      expect(execCmdMock).toHaveBeenCalledWith(
-        "git remote set-branches origin '*'",
+      expect(execGitMock).toHaveBeenCalledWith(
+        ['remote', 'set-branches', 'origin', '*'],
         expect.any(String)
       );
 
-      expect(execCmdMock).toHaveBeenCalledWith(
-        'git fetch -v --depth=1',
+      expect(execGitMock).toHaveBeenCalledWith(
+        ['fetch', '-v', '--depth=1'],
         expect.any(String)
       );
     });
@@ -308,14 +305,15 @@ describe('git.ts - Git class', () => {
 
   describe('clone', () => {
     it('should clone with branch option when branch is not default', async () => {
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
 
       await git.initRepo(mockRepoInfo);
 
-      const cloneCall = execCmdMock.mock.calls.find((call) =>
-        typeof call[0] === 'string' && call[0].includes('git clone')
+      const cloneCall = execGitMock.mock.calls.find(
+        (call) => Array.isArray(call[0]) && call[0][0] === 'clone'
       );
-      expect(cloneCall?.[0]).toContain('--branch "main"');
+      expect(cloneCall?.[0]).toContain('--branch');
+      expect(cloneCall?.[0]).toContain('main');
     });
 
     it('should clone without branch option when branch is default', async () => {
@@ -324,13 +322,13 @@ describe('git.ts - Git class', () => {
         branch: 'default'
       };
 
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
 
       await git.initRepo(defaultBranchRepo);
 
       // Should not include --branch option
-      const cloneCall = execCmdMock.mock.calls.find((call) =>
-        typeof call[0] === 'string' && call[0].includes('git clone')
+      const cloneCall = execGitMock.mock.calls.find(
+        (call) => Array.isArray(call[0]) && call[0][0] === 'clone'
       );
       expect(cloneCall?.[0]).not.toContain('--branch');
     });
@@ -338,8 +336,8 @@ describe('git.ts - Git class', () => {
 
   describe('getBaseBranch', () => {
     it('should get current branch name', async () => {
-      execCmdMock.mockImplementation((cmd: string) => {
-        if (cmd.includes('git rev-parse --abbrev-ref HEAD')) {
+      execGitMock.mockImplementation((args: string[]) => {
+        if (Array.isArray(args) && args.join(' ') === 'rev-parse --abbrev-ref HEAD') {
           return Promise.resolve('main');
         }
         return Promise.resolve('');
@@ -347,8 +345,8 @@ describe('git.ts - Git class', () => {
 
       await git.initRepo(mockRepoInfo);
 
-      expect(execCmdMock).toHaveBeenCalledWith(
-        'git rev-parse --abbrev-ref HEAD',
+      expect(execGitMock).toHaveBeenCalledWith(
+        ['rev-parse', '--abbrev-ref', 'HEAD'],
         expect.any(String)
       );
     });
@@ -363,7 +361,7 @@ describe('git.ts - edge cases', () => {
   describe('branch name sanitization', () => {
     it('should handle special characters in branch name', async () => {
       const git = new Git();
-      execCmdMock.mockResolvedValue('feature/test');
+      execGitMock.mockResolvedValue('feature/test');
 
       const repoWithSpecialBranch: RepoInfo = {
         url: 'https://github.com/test/repo',
@@ -377,17 +375,18 @@ describe('git.ts - edge cases', () => {
 
       await git.initRepo(repoWithSpecialBranch);
 
-      const cloneCall = execCmdMock.mock.calls.find((call) =>
-        typeof call[0] === 'string' && call[0].includes('git clone')
+      const cloneCall = execGitMock.mock.calls.find(
+        (call) => Array.isArray(call[0]) && call[0][0] === 'clone'
       );
-      expect(cloneCall?.[0]).toContain('--branch "feature/test"');
+      expect(cloneCall?.[0]).toContain('--branch');
+      expect(cloneCall?.[0]).toContain('feature/test');
     });
   });
 
   describe('working directory path', () => {
     it('should use unique name for working directory', async () => {
       const git = new Git();
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
 
       await git.initRepo({
         url: 'https://github.com/org/unique-repo',
@@ -408,7 +407,7 @@ describe('git.ts - edge cases', () => {
   describe('getCommitsToPush', () => {
     it('should use lastCommitSha as base ref to avoid shallow clone issues', async () => {
       const git = new Git();
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
 
       await git.initRepo({
         url: 'https://github.com/test/repo',
@@ -422,13 +421,13 @@ describe('git.ts - edge cases', () => {
 
       // Simulate lastCommitSha being set (it's set during initRepo via getLastCommitSha)
       // Now call getCommitsToPush
-      execCmdMock.mockResolvedValueOnce('abc123\ndef456');
+      execGitMock.mockResolvedValueOnce('abc123\ndef456');
 
       const commits = await (git as unknown as { getCommitsToPush: () => Promise<string[]> }).getCommitsToPush();
 
       // Verify it uses lastCommitSha (which is 'main' from mock) not baseBranch
-      const logCall = execCmdMock.mock.calls.find((call) =>
-        typeof call[0] === 'string' && call[0].includes('git log --format=%H --reverse')
+      const logCall = execGitMock.mock.calls.find(
+        (call) => Array.isArray(call[0]) && call[0][0] === 'log'
       );
       expect(logCall).toBeDefined();
       expect(logCall?.[0]).toContain('main..HEAD');
@@ -437,7 +436,7 @@ describe('git.ts - edge cases', () => {
 
     it('should filter empty strings from git log output', async () => {
       const git = new Git();
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
 
       await git.initRepo({
         url: 'https://github.com/test/repo',
@@ -450,7 +449,7 @@ describe('git.ts - edge cases', () => {
       });
 
       // Empty output (no new commits)
-      execCmdMock.mockResolvedValueOnce('');
+      execGitMock.mockResolvedValueOnce('');
 
       const commits = await (git as unknown as { getCommitsToPush: () => Promise<string[]> }).getCommitsToPush();
       expect(commits).toEqual([]);
@@ -460,7 +459,7 @@ describe('git.ts - edge cases', () => {
   describe('getAllChangedFiles', () => {
     it('should return all files changed in the existing pull request', async () => {
       const git = new Git();
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
 
       await git.initRepo({
         url: 'https://github.com/test/repo',
@@ -506,7 +505,7 @@ describe('git.ts - edge cases', () => {
 
     it('should return empty string when no files changed', async () => {
       const git = new Git();
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
 
       await git.initRepo({
         url: 'https://github.com/test/repo',
@@ -531,7 +530,7 @@ describe('git.ts - edge cases', () => {
 
     it('should paginate pull request files', async () => {
       const git = new Git();
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
 
       await git.initRepo({
         url: 'https://github.com/test/repo',
@@ -562,7 +561,7 @@ describe('git.ts - edge cases', () => {
   describe('closed PR handling', () => {
     it('should detect closed unmerged PR and delete remote branch', async () => {
       const git = new Git();
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
 
       await git.initRepo({
         url: 'https://github.com/test/repo',
@@ -588,7 +587,7 @@ describe('git.ts - edge cases', () => {
 
     it('should not flag merged PRs as closed', async () => {
       const git = new Git();
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
 
       await git.initRepo({
         url: 'https://github.com/test/repo',
@@ -614,7 +613,7 @@ describe('git.ts - edge cases', () => {
 
     it('should return false when no closed PRs exist', async () => {
       const git = new Git();
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
 
       await git.initRepo({
         url: 'https://github.com/test/repo',
@@ -637,7 +636,7 @@ describe('git.ts - edge cases', () => {
 
     it('should call deleteRef when deleting remote branch', async () => {
       const git = new Git();
-      execCmdMock.mockResolvedValue('main');
+      execGitMock.mockResolvedValue('main');
 
       await git.initRepo({
         url: 'https://github.com/test/repo',

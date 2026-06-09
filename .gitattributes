@@ -1,0 +1,9 @@
+# Normalize line endings to LF on checkout for every platform.
+# This keeps source and test files byte-identical on Windows CI runners,
+# so line-ending sensitive logic (git diff parsing, dedent template literals)
+# behaves the same everywhere.
+* text=auto eol=lf
+
+# Explicitly treat lockfiles and shell scripts as LF text.
+pnpm-lock.yaml text eol=lf
+*.sh text eol=lf

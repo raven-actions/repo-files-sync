@@ -1,6 +1,6 @@
 import fs from 'fs-extra';
 import { readdir } from 'fs/promises';
-import { exec, execFile } from 'child_process';
+import { execFile } from 'child_process';
 import * as core from '@actions/core';
 import * as path from 'path';
 import nunjucks from 'nunjucks';
@@ -104,30 +104,6 @@ export function dedent(templateStrings: TemplateStringsArray | string, ...values
   }
 
   return result;
-}
-
-/**
- * Execute a shell command and return the output
- */
-export function execCmd(command: string, workingDir?: string, trimResult = true): Promise<string> {
-  core.debug(`EXEC: "${command}" IN ${workingDir ?? 'default'}`);
-
-  return new Promise((resolve, reject) => {
-    exec(
-      command,
-      {
-        cwd: workingDir,
-        maxBuffer: 1024 * 1024 * 20
-      },
-      (error, stdout) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve(trimResult ? stdout.trim() : stdout);
-        }
-      }
-    );
-  });
 }
 
 /**
