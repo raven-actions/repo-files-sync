@@ -48,6 +48,7 @@ function initializeContext(): ConfigContext {
     DRY_RUN: getBooleanInput('DRY_RUN', false),
     SKIP_CLEANUP: getBooleanInput('SKIP_CLEANUP', false),
     OVERWRITE_EXISTING_PR: getBooleanInput('OVERWRITE_EXISTING_PR', true),
+    REBASE: getBooleanInput('REBASE', false),
     GITHUB_REPOSITORY: process.env['GITHUB_REPOSITORY'] || '',
     SKIP_PR: getBooleanInput('SKIP_PR', false),
     ORIGINAL_MESSAGE: getBooleanInput('ORIGINAL_MESSAGE', false),
@@ -59,6 +60,18 @@ function initializeContext(): ConfigContext {
 
   core.setSecret(context.GITHUB_TOKEN);
   core.debug(JSON.stringify(context, null, 2));
+
+  // REBASE only applies to the reuse-an-existing-PR flow. Warn when it is
+  // combined with options that bypass that flow so it has no silent surprises.
+  if (context.REBASE && context.SKIP_PR) {
+    core.warning(
+      'REBASE has no effect when SKIP_PR is true: changes are pushed directly to the base branch without a pull request.'
+    );
+  } else if (context.REBASE && !context.OVERWRITE_EXISTING_PR) {
+    core.warning(
+      'REBASE has no effect when OVERWRITE_EXISTING_PR is false: a new branch is created from the base branch on every run.'
+    );
+  }
 
   // Ensure TMP_DIR is unique
   while (fs.existsSync(context.TMP_DIR)) {

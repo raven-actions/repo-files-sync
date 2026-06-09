@@ -42,7 +42,8 @@ const {
   SKIP_PR,
   PR_BODY,
   BRANCH_PREFIX,
-  FORK
+  FORK,
+  REBASE
 } = config;
 
 export default class Git {
@@ -56,6 +57,7 @@ export default class Git {
   private lastCommitSha!: string;
   private lastCommitChanges: GitDiffDict | undefined;
   private remoteBranchHead: string | undefined;
+  private forceUpdateBranch = false;
   public workingDir!: string;
 
   constructor() {
@@ -102,6 +104,7 @@ export default class Git {
     this.prBranch = undefined;
     this.prBranchSuffix = undefined;
     this.remoteBranchHead = undefined;
+    this.forceUpdateBranch = false;
     this.lastCommitChanges = undefined;
 
     // Set values to current repo
@@ -204,13 +207,24 @@ export default class Git {
     }
 
     // If the remote branch exists but has a closed (unmerged) PR, delete it and start fresh
-    if (this.remoteBranchHead && (await this.hasClosedPr())) {
+    const branchHasClosedPr = this.remoteBranchHead ? await this.hasClosedPr() : false;
+
+    if (this.remoteBranchHead && branchHasClosedPr) {
       core.info(`Found closed PR for branch ${newBranch}, deleting remote branch to start fresh`);
       await this.deleteRemoteBranch(newBranch);
       this.remoteBranchHead = undefined;
 
       // Create a new local branch from the base branch
       await execGit(['switch', '-c', newBranch], this.workingDir);
+    } else if (REBASE && this.remoteBranchHead && (await this.isBranchBehindBase(newBranch))) {
+      // REBASE: keep an existing sync PR up to date with the base branch
+      // (Dependabot-style). The working tree is a fresh clone of the base branch
+      // tip, so (re)create the PR branch from that tip and re-apply the sync on
+      // top. The branch is then force-updated (see push()), so the same PR is
+      // reused but always rebased onto the latest base.
+      core.info(`PR branch ${newBranch} is behind ${this.baseBranch}, rebasing onto the latest base`);
+      await execGit(['switch', '-C', newBranch], this.workingDir);
+      this.forceUpdateBranch = true;
     } else {
       // Switch to the existing branch, or create it if it doesn't exist locally.
       // Use execGit (no shell) instead of `2>/dev/null || ...`, which is POSIX-only
@@ -454,7 +468,7 @@ export default class Git {
       repo: this.repo.name,
       ref: `heads/${targetRef}`,
       sha: this.lastCommitSha,
-      force: false
+      force: this.forceUpdateBranch
     });
 
     core.debug('Commit using GitHub API completed');
@@ -467,7 +481,9 @@ export default class Git {
   async push(): Promise<string | void> {
     const targetBranch = SKIP_PR ? this.baseBranch : this.prBranch;
 
-    if (!FORK && targetBranch) {
+    // In REBASE mode the PR branch is intentionally rewritten onto the latest
+    // base, so skip the manual-change guard (the force update is deliberate).
+    if (!FORK && targetBranch && !this.forceUpdateBranch) {
       try {
         await execGit(['fetch', 'origin', targetBranch], this.workingDir);
         const currentRemoteHead = await execGit(['rev-parse', '--verify', `origin/${targetBranch}`], this.workingDir);
@@ -481,11 +497,16 @@ export default class Git {
     }
 
     if (FORK) {
-      return execGit(['push', '-u', 'fork', this.prBranch ?? ''], this.workingDir);
+      const forceArgs = this.forceUpdateBranch ? ['--force'] : [];
+      return execGit(['push', '-u', ...forceArgs, 'fork', this.prBranch ?? ''], this.workingDir);
     }
 
     if (IS_INSTALLATION_TOKEN) {
       return this.createGithubVerifiedCommits();
+    }
+
+    if (this.forceUpdateBranch && this.prBranch) {
+      return execGit(['push', '--force', this.gitUrl, `HEAD:refs/heads/${this.prBranch}`], this.workingDir);
     }
 
     return execGit(['push', this.gitUrl], this.workingDir);
@@ -520,6 +541,31 @@ export default class Git {
 
     // Only consider closed PRs that were NOT merged
     return data.some((pr) => !pr.merged_at);
+  }
+
+  /**
+   * Returns true when the existing PR branch has fallen behind the base branch,
+   * i.e. the base branch contains commits that are not yet in the PR branch.
+   * Used by REBASE mode to decide whether to rebuild the PR branch on the latest
+   * base. Uses the compare API so it works with shallow clones; on any error it
+   * conservatively returns false (no force-update).
+   */
+  private async isBranchBehindBase(branch: string): Promise<boolean> {
+    try {
+      const { data } = await this.github.repos.compareCommits({
+        owner: this.repo.user,
+        repo: this.repo.name,
+        base: branch,
+        head: this.baseBranch
+      });
+
+      // `head` (the base branch) being ahead of `base` (the PR branch) means the
+      // PR branch is missing base commits, so it is behind and should be rebased.
+      return (data.ahead_by ?? 0) > 0;
+    } catch (error) {
+      core.debug(`Could not determine if ${branch} is behind ${this.baseBranch}: ${String(error)}`);
+      return false;
+    }
   }
 
   async deleteRemoteBranch(branch: string): Promise<void> {

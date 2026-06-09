@@ -107,6 +107,15 @@ inputs:
       If false, create a new branch per run.
       Defaults to true.
     required: false
+  REBASE:
+    description: |
+      Keep an existing sync pull request up to date with the target (base)
+      branch, similar to Dependabot's rebase. When the PR branch falls behind
+      the base branch it is rebuilt on the latest base and force-updated, which
+      discards any commits pushed manually to the sync branch.
+      Requires OVERWRITE_EXISTING_PR (default) and has no effect with SKIP_PR.
+      Defaults to false.
+    required: false
   ORIGINAL_MESSAGE:
     description: |
       Re-use the original commit message for commits.
