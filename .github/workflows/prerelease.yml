@@ -152,19 +152,19 @@ jobs:
           name: dist
           path: dist/
 
-      # Pin the README usage examples to the target STABLE version before the
-      # curated commit is built, so the tree that the final tag points at shows
-      # the correct version (the final release reuses this RC's commit verbatim).
-      # Uses the upcoming stable version (not the -rc tag) since that is what the
-      # published action will be. Only refs to THIS action are rewritten.
+      # Pin the README usage examples to the RC tag (vX.Y.Z-rc.N) before the
+      # curated commit is built, so the draft/prerelease documents the exact
+      # version a consumer would install from it. When the final release is cut,
+      # publish-release.yml re-pins the README to the stable vX.Y.Z tag, so every
+      # artifact's docs match its own tag. Only refs to THIS action are rewritten.
       - name: Pin action version in README
         if: steps.guard.outputs.skip != 'true'
         env:
-          VERSION: ${{ steps.release-details.outputs.version }}
+          RC_TAG: ${{ steps.rc.outputs.rc_tag }}
           REPO: ${{ github.repository }}
         run: |
-          sed -i -E "s#(${REPO}@)v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?#\1${VERSION}#g" README.md
-          echo "README now pins ${REPO}@${VERSION}:"
+          sed -i -E "s#(${REPO}@)v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?#\1${RC_TAG}#g" README.md
+          echo "README now pins ${REPO}@${RC_TAG}:"
           grep -n "${REPO}@" README.md || true
 
       - name: Prepare Release Branch
