@@ -5,6 +5,12 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    // JUnit is a test-results reporter (not a coverage reporter); emit it to a
+    // file so Codecov Test Analytics can ingest it via report_type: test_results.
+    reporters: ['default', 'junit'],
+    outputFile: {
+      junit: './junit.xml'
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],

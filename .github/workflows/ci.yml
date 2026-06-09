@@ -101,6 +101,20 @@ jobs:
           files: ./coverage/lcov.info
           fail_ci_if_error: false
 
+      # Upload JUnit results to Codecov Test Analytics. Uses the same codecov-action
+      # with report_type: test_results (the standalone test-results-action is deprecated).
+      # !cancelled() ensures failing tests are still reported, which is the whole point.
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-24.04' }}
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          # token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: true
+          report_type: test_results
+          files: ./junit.xml
+          disable_search: true
+          fail_ci_if_error: false
+
   # Aggregates the test matrix into a single, stable status check.
   # Use this job's name ("Test Check") as the required check in repository rules
   # instead of the per-OS legs, which change whenever the matrix changes.

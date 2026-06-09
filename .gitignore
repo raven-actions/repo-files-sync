@@ -145,3 +145,4 @@ vite.config.ts.timestamp-*
 sync.yml
 sync.yaml
 tmp-*/
+junit.xml
