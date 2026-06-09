@@ -152,6 +152,21 @@ jobs:
           name: dist
           path: dist/
 
+      # Pin the README usage examples to the target STABLE version before the
+      # curated commit is built, so the tree that the final tag points at shows
+      # the correct version (the final release reuses this RC's commit verbatim).
+      # Uses the upcoming stable version (not the -rc tag) since that is what the
+      # published action will be. Only refs to THIS action are rewritten.
+      - name: Pin action version in README
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.release-details.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          sed -i -E "s#(${REPO}@)v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?#\1${VERSION}#g" README.md
+          echo "README now pins ${REPO}@${VERSION}:"
+          grep -n "${REPO}@" README.md || true
+
       - name: Prepare Release Branch
         id: release-branch
         if: steps.guard.outputs.skip != 'true'
@@ -168,7 +183,6 @@ jobs:
             README.md
             action.yml
             dist
-            .github/workflows/publish.yml
 
       # A draft release never creates its git tag, so GitHub would otherwise let
       # each run pile up a brand-new draft. Delete any existing draft RC first so

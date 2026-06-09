@@ -6,7 +6,7 @@ name: Prepare Release
 #
 # It computes the next stable version and the FULL release notes since the last
 # final release, updates CHANGELOG.md, and opens a PR titled
-# `chore(release): vX.Y.Z`. Merging that PR triggers publish.yml, which tags the
+# `chore(release): vX.Y.Z`. Merging that PR triggers publish-release.yml, which tags the
 # final release at the exact commit of the last release candidate (see the
 # `prerelease/vX.Y.Z` branch). Cut at least one RC (merge to main) before running.
 
@@ -75,6 +75,20 @@ jobs:
           OUTPUT: CHANGELOG.md
           GITHUB_TOKEN: ${{ github.token }}
 
+      # Pin the action version in the README usage examples to the version being
+      # released, so the docs rendered from the default branch always match the
+      # just-published tag. Only references to THIS action are rewritten (the
+      # pattern is keyed to the repo slug), and the value equals the release tag
+      # exactly. git-cliff cannot edit arbitrary files, so this is a plain sed.
+      - name: Pin action version in README
+        env:
+          VERSION: ${{ steps.notes.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          sed -i -E "s#(${REPO}@)v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?#\1${VERSION}#g" README.md
+          echo "README now pins ${REPO}@${VERSION}:"
+          grep -n "${REPO}@" README.md || true
+
       - name: Open release PR
         id: pr
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -85,7 +99,9 @@ jobs:
         env:
           INPUT_VERSION: ${{ steps.notes.outputs.version }}
           INPUT_NOTES: ${{ steps.notes.outputs.content }}
-          INPUT_FILE: CHANGELOG.md
+          INPUT_FILES: |
+            CHANGELOG.md
+            README.md
           INPUT_BRANCH_PREFIX: release-prep
 
       - name: Summary
