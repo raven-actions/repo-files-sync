@@ -1,0 +1,93 @@
+---
+name: Publish Release
+
+# Publishes the final release when a `chore(release): vX.Y.Z` PR (opened by the
+# Prepare Release workflow) is merged into main. The final tag is created at the
+# exact commit of the last release candidate (the tip of prerelease/vX.Y.Z), so
+# the published artifact is byte-identical to the last RC - no rebuild.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    if: >-
+      ${{ github.event.pull_request.merged == true
+      && startsWith(github.event.pull_request.title, 'chore(release): ') }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      # Parse the version from the PR title and resolve the commit of the last RC
+      # (the tip of prerelease/vX.Y.Z). Fail clearly if no RC branch exists.
+      - name: Resolve release version and commit
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          version="${TITLE#chore(release): }"
+          version="$(printf '%s' "${version}" | tr -d '[:space:]')"
+          if ! printf '%s' "${version}" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::PR title does not contain a valid release version: ${TITLE}"
+            exit 1
+          fi
+          sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/refs/heads/prerelease/${version}" --jq '.object.sha' 2>/dev/null || true)"
+          if [ -z "${sha}" ]; then
+            echo "::error::No release candidate branch prerelease/${version}; cannot publish."
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "Releasing ${version} at ${sha} (last RC commit)"
+
+      - name: Write release notes
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s' "${BODY}" > release-notes.md
+
+      # Create the immutable final release/tag at the last RC commit and mark it
+      # latest. --target pins the new tag to that exact commit.
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+          TARGET: ${{ steps.resolve.outputs.sha }}
+        run: |
+          gh release create "${VERSION}" \
+            --target "${TARGET}" \
+            --title "${VERSION}" \
+            --notes-file release-notes.md \
+            --latest
+
+      - name: Update Major and Minor Tags
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { default: script } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/major-tag-update.mjs`)
+            await script({ context, github, core })
+        env:
+          INPUT_TAG: ${{ steps.resolve.outputs.version }}
+
+      - name: Remove Release Branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/prerelease/${VERSION}" --silent || true
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/release-prep/${VERSION}" --silent || true
