@@ -24,6 +24,7 @@ With [repo-files-sync](https://github.com/raven-actions/repo-files-sync) you can
 - Create a pull request in the target repo so you have the last say on what gets merged
 - Filter directory syncs using glob patterns (`include`, `exclude`)
 - Optionally delete orphaned files in the target (`deleteOrphaned` / `DELETE_ORPHANED`)
+- Optionally keep sync pull requests rebased on the latest base branch (`REBASE`), similar to Dependabot
 - Automatically label pull requests to integrate with other actions like [automerge-action](https://github.com/pascalgn/automerge-action)
 - Assign users to the pull request
 - Request reviews globally or per group (users and teams)
@@ -151,6 +152,7 @@ Here are all the inputs [repo-files-sync](https://github.com/raven-actions/repo-
 | `GIT_EMAIL`             | The e-mail address used to commit the synced files                                                                                             | **Only when using installation token**           | the email of the PAT used      |
 | `GIT_USERNAME`          | The username used to commit the synced files                                                                                                   | **Only when using installation token**           | the username of the PAT used   |
 | `OVERWRITE_EXISTING_PR` | Overwrite any existing Sync PR with the new changes                                                                                            | **No**                                           | true                           |
+| `REBASE`                | Keep an existing sync PR up to date with the target branch (Dependabot-style); rebuilds the branch on the latest base and force-updates it      | **No**                                           | false                          |
 | `BRANCH_PREFIX`         | Specify a different prefix for the new branch in the target repo                                                                               | **No**                                           | repo-sync/SOURCE_REPO_NAME     |
 | `TMP_DIR`               | The working directory where all git operations will be done                                                                                    | **No**                                           | tmp-${ Date.now().toString() } |
 | `DRY_RUN`               | Run everything except that nothing will be pushed                                                                                              | **No**                                           | false                          |
@@ -164,6 +166,7 @@ Here are all the inputs [repo-files-sync](https://github.com/raven-actions/repo-
 - `DRY_RUN: true` runs the full sync logic, but does not push any changes.
 - `SKIP_PR: true` pushes changes directly to the target repo's default branch (no PR).
 - `SKIP_CLEANUP: true` keeps the working directory (`TMP_DIR`) on the runner for debugging.
+- `REBASE: true` keeps an open sync PR rebased on the latest base branch, similar to [Dependabot's rebase](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/managing-pull-requests-for-dependency-updates#managing-dependabot-pull-requests-with-comment-commands). When the PR branch is behind the base branch it is rebuilt on top of the latest base and force-pushed, so any commits pushed manually to the sync branch are discarded. Requires `OVERWRITE_EXISTING_PR` (the default) and has no effect with `SKIP_PR`.
 
 ### Outputs
 

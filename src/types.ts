@@ -74,6 +74,7 @@ export interface ConfigContext {
   DRY_RUN: boolean;
   SKIP_CLEANUP: boolean;
   OVERWRITE_EXISTING_PR: boolean;
+  REBASE: boolean;
   GITHUB_REPOSITORY: string;
   SKIP_PR: boolean;
   ORIGINAL_MESSAGE: boolean;
