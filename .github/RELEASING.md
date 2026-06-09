@@ -27,6 +27,8 @@ break-glass procedures.
    - rebuilds `dist/` from the exact tested commit and attaches a signed SLSA
      build provenance attestation,
    - skips entirely if no version-bumping commits landed (no-op guard),
+   - pins the `README.md` usage examples to the target stable `vX.Y.Z`, so the
+     curated tree the final tag will point at advertises the correct version,
    - creates a GitHub-**verified** commit on the `prerelease/vX.Y.Z` branch
      (curated release files only); this branch tip always points at the latest RC,
    - overwrites the pending **draft** prerelease `vX.Y.Z-rc.N` (deleting any
@@ -45,15 +47,14 @@ branch tip and advances the proposed number for the next draft.
    - computes the target version and the **full** notes since the last final
      release,
    - verifies a `prerelease/vX.Y.Z` branch exists (i.e. an RC was cut),
-   - updates `CHANGELOG.md`,
+   - updates `CHANGELOG.md` and pins the `README.md` usage examples to
+     `vX.Y.Z` (so the default branch docs match the published tag),
    - opens a PR titled `chore(release): vX.Y.Z` with the full notes as its body.
 2. Review the PR (notes + `CHANGELOG.md`). Edit the PR body if you want to adjust
    the published notes. **Merge it** (squash).
-3. `publish.yml` runs on the merge and:
+3. `publish-release.yml` runs on the merge and:
    - tags `vX.Y.Z` at the tip of `prerelease/vX.Y.Z` (the exact last RC commit)
      and marks it `latest`,
-   - moves the floating `v<major>` / `v<major>.<minor>` tags to that commit
-     (`major-tag-update.mjs`),
    - deletes the `prerelease/vX.Y.Z` and `release-prep/vX.Y.Z` branches.
 
 > The release PR is created by the workflow token, so token-triggered checks
@@ -75,33 +76,30 @@ Release** to regenerate it.
 ### A bad version was published (forward fix - preferred)
 
 1. Revert the offending change on `main` (`git revert <sha>`), open a PR, merge.
-2. Let an RC build, then run **Prepare Release** again; publishing the next patch
-   (e.g. `v1.2.3` -> `v1.2.4`) moves the floating `v1` / `v1.2` aliases onto the
-   fixed commit, so consumers pinning `@v1` recover automatically.
+2. Let an RC build, then run **Prepare Release** again to publish the next patch
+   (e.g. `v1.2.3` -> `v1.2.4`). Consumers move forward by bumping the pinned
+   exact version (Dependabot raises that bump automatically).
 
-### Break-glass: re-point floating aliases immediately
+### Break-glass: stop consumers from getting a bad release
 
-If you must move consumers off a bad `vX.Y.Z` before a fix is ready, re-point the
-movable aliases back to the previous good commit. The exact version tag stays
-locked (immutable) - only the aliases move:
+Exact version tags are immutable and cannot be moved, so the only levers are the
+**Latest** pointer and the release listing. Point **Latest** back at the previous
+good release and de-list the bad one:
 
 ```bash
-# resolve the previous good release commit
-PREV_SHA="$(gh api repos/<owner>/<repo>/git/refs/tags/<prev-version> --jq .object.sha)"
-
-# force-move the floating aliases (NOT the immutable vX.Y.Z tag)
-gh api --method PATCH "repos/<owner>/<repo>/git/refs/tags/v1"   -f sha="$PREV_SHA" -F force=true
-gh api --method PATCH "repos/<owner>/<repo>/git/refs/tags/v1.2" -f sha="$PREV_SHA" -F force=true
-
-# restore the "latest" pointer to the previous release
+# restore the "Latest" badge to the previous good release
 gh release edit "<prev-version>" --latest
+
+# de-list the bad release (or delete it from the Releases page)
+gh release edit "<bad-version>" --draft
 ```
 
-Then delete or de-list the bad release from the **Releases** page.
+Consumers pinned to the bad exact tag recover by bumping to the fixed version
+once it ships (Dependabot raises that bump automatically).
 
 ## Notes
 
-- Floating `v<major>` / `v<major>.<minor>` tags must **never** be attached to a
-  GitHub release - immutable releases would lock them and break the alias model.
+- This project publishes only exact, immutable `vX.Y.Z` tags - there are no
+  floating `latest` / `v<major>` / `v<major>.<minor>` aliases to maintain.
 - `dist/` is rebuilt in CI and provenance-signed; verify any published artifact
   with `gh attestation verify dist/index.mjs --repo <owner>/<repo>`.

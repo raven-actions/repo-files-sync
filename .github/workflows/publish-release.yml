@@ -76,15 +76,6 @@ jobs:
             --notes-file release-notes.md \
             --latest
 
-      - name: Update Major and Minor Tags
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const { default: script } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/major-tag-update.mjs`)
-            await script({ context, github, core })
-        env:
-          INPUT_TAG: ${{ steps.resolve.outputs.version }}
-
       - name: Remove Release Branches
         env:
           GH_TOKEN: ${{ github.token }}

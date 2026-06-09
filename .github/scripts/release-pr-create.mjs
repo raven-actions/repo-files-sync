@@ -8,14 +8,14 @@ import fs from 'node:fs'
  * Creates a GitHub-verified commit on a `release-prep/<version>` branch that
  * adds/updates the changelog file on top of the base branch, then opens a PR
  * titled `chore(release): <version>`. Merging that PR is what triggers the
- * final publish (see publish.yml).
+ * final publish (see publish-release.yml).
  *
  * This script is designed to be used with actions/github-script.
  *
  * Inputs (via environment variables INPUT_*):
  * - VERSION (required): Final release version (e.g. "v1.3.0")
  * - NOTES (optional): PR body / release notes (full notes since last final)
- * - FILE (optional): Changelog file to commit, default: "CHANGELOG.md"
+ * - FILES (optional): Multiline list of files to commit, default: "CHANGELOG.md"
  * - BRANCH_PREFIX (optional): Branch prefix, default: "release-prep"
  * - BASE_BRANCH (optional): Base branch, default: "main"
  *
@@ -29,15 +29,18 @@ export default async function main({ context, github, core }) {
 
   const version = core.getInput('VERSION', { required: true })
   const notes = core.getInput('NOTES') || `Release ${version}`
-  const file = core.getInput('FILE') || 'CHANGELOG.md'
+  const filesInput = core.getMultilineInput('FILES')
+  const files = filesInput.length ? filesInput : ['CHANGELOG.md']
   const branchPrefix = core.getInput('BRANCH_PREFIX') || 'release-prep'
   const baseBranch = core.getInput('BASE_BRANCH') || 'main'
 
   const branch = `${branchPrefix}/${version}`
   const title = `chore(release): ${version}`
 
-  if (!fs.existsSync(file)) {
-    throw new Error(`Changelog file missing: ${file}`)
+  for (const file of files) {
+    if (!fs.existsSync(file)) {
+      throw new Error(`Release file missing: ${file}`)
+    }
   }
 
   // Resolve base branch HEAD and its tree (so we commit ON TOP of main).
@@ -46,21 +49,25 @@ export default async function main({ context, github, core }) {
   const parentSha = baseRef.object.sha
   const { data: baseCommit } = await github.rest.git.getCommit({ owner, repo, commit_sha: parentSha })
 
-  // Blob for the changelog file.
-  const content = fs.readFileSync(file)
-  const { data: blob } = await github.rest.git.createBlob({
-    owner,
-    repo,
-    content: content.toString('base64'),
-    encoding: 'base64'
-  })
+  // One blob per file, layered on top of the base tree (adds/updates only these).
+  /** @type {Array<{ path: string, mode: '100644', type: 'blob', sha: string }>} */
+  const treeEntries = []
+  for (const file of files) {
+    const content = fs.readFileSync(file)
+    const { data: blob } = await github.rest.git.createBlob({
+      owner,
+      repo,
+      content: content.toString('base64'),
+      encoding: 'base64'
+    })
+    treeEntries.push({ path: file, mode: '100644', type: 'blob', sha: blob.sha })
+  }
 
-  // Tree layered on top of the base tree (adds/updates only the changelog).
   const { data: tree } = await github.rest.git.createTree({
     owner,
     repo,
     base_tree: baseCommit.tree.sha,
-    tree: [{ path: file, mode: '100644', type: 'blob', sha: blob.sha }]
+    tree: treeEntries
   })
 
   // Verified commit (GitHub signs commits created via the API).
