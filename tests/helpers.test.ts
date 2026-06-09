@@ -18,7 +18,7 @@ vi.mock('@actions/core', () => ({
 import {
   forEach,
   dedent,
-  execCmd,
+  execGit,
   addTrailingSlash,
   pathIsDirectory,
   createFilterFunc,
@@ -193,45 +193,47 @@ describe('helpers.ts', () => {
     });
   });
 
-  describe('execCmd', () => {
-    it('should execute command and return output', async () => {
-      const result = await execCmd('echo hello');
+  describe('execGit', () => {
+    it('should execute git command and return trimmed output', async () => {
+      const result = await execGit(['--version']);
 
-      expect(result).toBe('hello');
-    });
-
-    it('should trim output by default', async () => {
-      const result = await execCmd('echo hello');
-
-      expect(result).toBe('hello');
+      expect(result).toMatch(/^git version/);
       expect(result).not.toMatch(/\s$/);
     });
 
     it('should not trim when trimResult is false', async () => {
-      // On Windows, echo adds \r\n, on Unix just \n
-      const result = await execCmd('echo hello', undefined, false);
+      const result = await execGit(['--version'], undefined, false);
 
-      expect(result).toMatch(/hello[\r\n]/);
+      expect(result).toMatch(/[\r\n]$/);
     });
 
     it('should execute in specified working directory', async () => {
-      const tempDir = os.tmpdir();
-      const result = await execCmd(process.platform === 'win32' ? 'cd' : 'pwd', tempDir);
+      const repoDir = path.join(os.tmpdir(), `exec-git-test-${Date.now()}`);
+      await fs.ensureDir(repoDir);
 
-      // Normalize paths for comparison
-      expect(path.normalize(result.toLowerCase())).toContain(
-        path.normalize(tempDir.toLowerCase()).split(path.sep).pop()
-      );
+      try {
+        await execGit(['init'], repoDir);
+        const result = await execGit(['rev-parse', '--is-inside-work-tree'], repoDir);
+
+        expect(result).toBe('true');
+      } finally {
+        await fs.remove(repoDir);
+      }
     });
 
-    it('should reject on command error', async () => {
-      await expect(execCmd('nonexistent-command-12345')).rejects.toThrow();
+    it('should reject on git error', async () => {
+      await expect(execGit(['not-a-real-git-subcommand-xyz'])).rejects.toThrow();
     });
 
-    it('should handle commands with arguments', async () => {
-      const result = await execCmd('echo one two three');
+    it('should pass arguments literally without shell interpolation', async () => {
+      // `git rev-parse --sq-quote` echoes its argument back, shell-quoted.
+      // Because execGit uses execFile (no shell), metacharacters survive verbatim
+      // instead of being expanded/executed.
+      const payload = 'a; rm -rf / && echo $(whoami)';
+      const result = await execGit(['rev-parse', '--sq-quote', payload]);
 
-      expect(result).toBe('one two three');
+      expect(result).toContain('rm -rf');
+      expect(result).toContain('$(whoami)');
     });
   });
 

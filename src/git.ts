@@ -5,7 +5,7 @@ import { throttling } from '@octokit/plugin-throttling';
 import * as path from 'path';
 
 import config from './config.js';
-import { dedent, execCmd, execGit, remove } from './helpers.js';
+import { dedent, execGit, remove } from './helpers.js';
 
 import type { RepoInfo, TreeDiffEntry, GitDiffDict } from './types.js';
 
@@ -135,15 +135,15 @@ export default class Git {
   }
 
   async createRemote(forkUrl: string): Promise<string> {
-    return execCmd(`git remote add fork ${forkUrl}`, this.workingDir);
+    return execGit(['remote', 'add', 'fork', forkUrl], this.workingDir);
   }
 
   async clone(): Promise<string> {
     core.debug(`Cloning ${this.repo.fullName} into ${this.workingDir}`);
 
-    const branchOption = this.repo.branch !== 'default' ? `--branch "${this.repo.branch}"` : '';
+    const branchArgs = this.repo.branch !== 'default' ? ['--branch', this.repo.branch] : [];
 
-    return execCmd(`git clone --depth 1 ${branchOption} ${this.gitUrl} ${this.workingDir}`);
+    return execGit(['clone', '--depth', '1', ...branchArgs, this.gitUrl, this.workingDir]);
   }
 
   async setIdentity(): Promise<string> {
@@ -160,14 +160,12 @@ export default class Git {
 
     core.debug(`Setting git user to email: ${email}, username: ${username}`);
 
-    return execCmd(
-      `git config --local user.name "${username}" && git config --local user.email "${email}"`,
-      this.workingDir
-    );
+    await execGit(['config', '--local', 'user.name', String(username)], this.workingDir);
+    return execGit(['config', '--local', 'user.email', String(email)], this.workingDir);
   }
 
   async getBaseBranch(): Promise<void> {
-    this.baseBranch = await execCmd(`git rev-parse --abbrev-ref HEAD`, this.workingDir);
+    this.baseBranch = await execGit(['rev-parse', '--abbrev-ref', 'HEAD'], this.workingDir);
   }
 
   async createPrBranch(branchSuffix = ''): Promise<void> {
@@ -196,10 +194,10 @@ export default class Git {
     // Use execGit (no shell) so the `*` refspec isn't mangled by cmd.exe on Windows
     // runners, where single quotes are not stripped.
     await execGit(['remote', 'set-branches', 'origin', '*'], this.workingDir);
-    await execCmd(`git fetch -v --depth=1`, this.workingDir);
+    await execGit(['fetch', '-v', '--depth=1'], this.workingDir);
 
     try {
-      this.remoteBranchHead = await execCmd(`git rev-parse --verify origin/${newBranch}`, this.workingDir);
+      this.remoteBranchHead = await execGit(['rev-parse', '--verify', `origin/${newBranch}`], this.workingDir);
     } catch {
       core.debug(`No existing remote branch for ${newBranch}`);
       this.remoteBranchHead = undefined;
@@ -228,11 +226,11 @@ export default class Git {
   }
 
   async add(file: string): Promise<string> {
-    return execCmd(`git add -f "${file}"`, this.workingDir);
+    return execGit(['add', '-f', file], this.workingDir);
   }
 
   async remove(file: string): Promise<string> {
-    return execCmd(`git rm -f "${file}"`, this.workingDir);
+    return execGit(['rm', '-f', file], this.workingDir);
   }
 
   async cleanupRepo(repo: RepoInfo, removeWorkingDir = true): Promise<void> {
@@ -326,25 +324,25 @@ export default class Git {
   }
 
   async getLastCommitSha(): Promise<void> {
-    this.lastCommitSha = await execCmd(`git rev-parse HEAD`, this.workingDir);
+    this.lastCommitSha = await execGit(['rev-parse', 'HEAD'], this.workingDir);
   }
 
   /**
    * Gets array of git diffs for the destination, which can be a file or directory
    */
   async changes(destination: string): Promise<string[]> {
-    const output = await execCmd(`git diff HEAD ${destination}`, this.workingDir);
+    const output = await execGit(['diff', 'HEAD', destination], this.workingDir);
     return Object.values(this.parseGitDiffOutput(output));
   }
 
   async hasChanges(): Promise<boolean> {
-    const statusOutput = await execCmd(`git status --porcelain`, this.workingDir);
+    const statusOutput = await execGit(['status', '--porcelain'], this.workingDir);
     // Non-empty output means there are changes
     return statusOutput.trim().length > 0;
   }
 
   async hasStagedChanges(): Promise<boolean> {
-    const output = await execCmd(`git diff --cached --name-only`, this.workingDir);
+    const output = await execGit(['diff', '--cached', '--name-only'], this.workingDir);
     return output.trim().length > 0;
   }
 
@@ -364,7 +362,7 @@ export default class Git {
   async getTreeId(commitSha: string): Promise<string> {
     core.debug(`Getting treeId for commit ${commitSha}`);
 
-    const output = (await execCmd(`git cat-file -p ${commitSha}`, this.workingDir)).split('\n');
+    const output = (await execGit(['cat-file', '-p', commitSha], this.workingDir)).split('\n');
 
     const commitHeaders = output.slice(
       0,
@@ -376,7 +374,7 @@ export default class Git {
   }
 
   async getTreeDiff(referenceTreeId: string, differenceTreeId: string): Promise<TreeDiffEntry[]> {
-    const output = await execCmd(`git diff-tree ${referenceTreeId} ${differenceTreeId} -r`, this.workingDir);
+    const output = await execGit(['diff-tree', referenceTreeId, differenceTreeId, '-r'], this.workingDir);
 
     return output.split('\n').map((line) => {
       const [newMode = '', previousMode = '', newBlob = '', previousBlob = '', change = '', filePath = ''] =
@@ -392,7 +390,7 @@ export default class Git {
   async uploadGitHubBlob(blob: string): Promise<void> {
     core.debug(`Uploading GitHub Blob for blob ${blob}`);
 
-    const fileContent = await execCmd(`git cat-file -p ${blob}`, this.workingDir, false);
+    const fileContent = await execGit(['cat-file', '-p', blob], this.workingDir, false);
 
     await this.github.git.createBlob({
       owner: this.repo.user,
@@ -409,12 +407,12 @@ export default class Git {
    * commits on an existing PR branch are not available.
    */
   async getCommitsToPush(): Promise<string[]> {
-    const output = await execCmd(`git log --format=%H --reverse ${this.lastCommitSha}..HEAD`, this.workingDir);
+    const output = await execGit(['log', '--format=%H', '--reverse', `${this.lastCommitSha}..HEAD`], this.workingDir);
     return output.split('\n').filter(Boolean);
   }
 
   async getCommitMessage(commitSha: string): Promise<string> {
-    return execCmd(`git log -1 --format=%B ${commitSha}`, this.workingDir);
+    return execGit(['log', '-1', '--format=%B', commitSha], this.workingDir);
   }
 
   /**
@@ -463,7 +461,7 @@ export default class Git {
   }
 
   async status(): Promise<string> {
-    return execCmd('git status', this.workingDir);
+    return execGit(['status'], this.workingDir);
   }
 
   async push(): Promise<string | void> {
@@ -471,8 +469,8 @@ export default class Git {
 
     if (!FORK && targetBranch) {
       try {
-        await execCmd(`git fetch origin ${targetBranch}`, this.workingDir);
-        const currentRemoteHead = await execCmd(`git rev-parse --verify origin/${targetBranch}`, this.workingDir);
+        await execGit(['fetch', 'origin', targetBranch], this.workingDir);
+        const currentRemoteHead = await execGit(['rev-parse', '--verify', `origin/${targetBranch}`], this.workingDir);
 
         if (this.remoteBranchHead && currentRemoteHead !== this.remoteBranchHead) {
           throw new Error(`Remote branch ${targetBranch} changed since checkout; refusing to overwrite manual changes.`);
@@ -483,14 +481,14 @@ export default class Git {
     }
 
     if (FORK) {
-      return execCmd(`git push -u fork ${this.prBranch ?? ''}`, this.workingDir);
+      return execGit(['push', '-u', 'fork', this.prBranch ?? ''], this.workingDir);
     }
 
     if (IS_INSTALLATION_TOKEN) {
       return this.createGithubVerifiedCommits();
     }
 
-    return execCmd(`git push ${this.gitUrl}`, this.workingDir);
+    return execGit(['push', this.gitUrl], this.workingDir);
   }
 
   async findExistingPr(): Promise<PullRequestInfo | undefined> {
