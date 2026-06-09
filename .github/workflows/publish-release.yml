@@ -4,8 +4,9 @@ name: Publish Release
 
 # Publishes the final release when a `chore(release): vX.Y.Z` PR (opened by the
 # Prepare Release workflow) is merged into main. The final tag is created at the
-# exact commit of the last release candidate (the tip of prerelease/vX.Y.Z), so
-# the published artifact is byte-identical to the last RC - no rebuild.
+# last release candidate commit, with the README usage examples re-pinned from
+# the RC tag (vX.Y.Z-rc.N) to the final vX.Y.Z. Only the README changes; dist/
+# (the attested action code) is carried over byte-identical from the last RC.
 
 on:
   pull_request:
@@ -62,13 +63,27 @@ jobs:
           BODY: ${{ github.event.pull_request.body }}
         run: printf '%s' "${BODY}" > release-notes.md
 
-      # Create the immutable final release/tag at the last RC commit and mark it
+      # The last RC commit documents the RC tag (vX.Y.Z-rc.N) in its README. Append
+      # a verified commit that re-pins only the README to the final vX.Y.Z, so the
+      # tag created below advertises its own version. dist/ stays byte-identical.
+      - name: Re-pin README to release version
+        id: finalize
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { default: script } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/release-finalize.mjs`)
+            await script({ context, github, core })
+        env:
+          INPUT_VERSION: ${{ steps.resolve.outputs.version }}
+          INPUT_BRANCH: prerelease/${{ steps.resolve.outputs.version }}
+
+      # Create the immutable final release/tag at the re-pinned commit and mark it
       # latest. --target pins the new tag to that exact commit.
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.resolve.outputs.version }}
-          TARGET: ${{ steps.resolve.outputs.sha }}
+          TARGET: ${{ steps.finalize.outputs.sha }}
         run: |
           gh release create "${VERSION}" \
             --target "${TARGET}" \

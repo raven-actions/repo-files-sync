@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
+---
+name: Cleanup Release Branches
+
+# Janitorial safety net for the release pipeline. The happy path already deletes
+# prerelease/vX.Y.Z and release-prep/vX.Y.Z when a final release publishes; this
+# removes the branches that slip through:
+#   - prerelease/vX.Y.Z superseded before shipping (e.g. a breaking change
+#     retargeted v0.1.0 -> v1.0.0) or left over from a failed cleanup,
+#   - release-prep/vX.Y.Z whose release PR was closed without merging.
+# The active in-flight branches (the highest prerelease/* ahead of the latest
+# stable release, and any release-prep/* with an open release PR) are kept.
+
+on:
+  schedule:
+    - cron: "0 4 * * 1" # weekly, Monday 04:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: List branches that would be deleted without deleting them
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: cleanup-release-branches
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Cleanup
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # delete orphaned release branches
+      pull-requests: read # detect open release PRs whose branches must be kept
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Cleanup orphaned release branches
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { default: script } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/release-branches-cleanup.mjs`)
+            await script({ context, github, core })
+        env:
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
