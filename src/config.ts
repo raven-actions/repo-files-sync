@@ -13,18 +13,21 @@ const TEMPLATE_DEFAULT = false;
  * Initialize and validate configuration context
  */
 function initializeContext(): ConfigContext {
-  let isInstallationToken = false;
-  let token = getInput('GH_PAT');
+  const token = getInput('GH_TOKEN');
 
   if (!token) {
-    token = getInput('GH_INSTALLATION_TOKEN');
-    isInstallationToken = true;
-
-    if (!token) {
-      core.setFailed('You must provide either GH_PAT or GH_INSTALLATION_TOKEN');
-      process.exit(1);
-    }
+    core.setFailed('You must provide GH_TOKEN');
+    process.exit(1);
   }
+
+  // A single GH_TOKEN serves both flows; the type is inferred from its documented
+  // prefix (https://github.blog/engineering/platform-security/behind-githubs-new-authentication-token-formats/):
+  //   ghs_        GitHub App installation token -> commits are created through the
+  //               GitHub API (verified) over the x-access-token git scheme, and
+  //               GIT_EMAIL/GIT_USERNAME are required.
+  //   github_pat_ fine-grained PAT -> authenticated over the oauth git scheme.
+  // Anything else is treated as a classic PAT.
+  const isInstallationToken = token.startsWith('ghs_');
 
   const context: ConfigContext = {
     GITHUB_TOKEN: token,
@@ -34,7 +37,7 @@ function initializeContext(): ConfigContext {
     GIT_USERNAME: getInput('GIT_USERNAME') || undefined,
     CONFIG_PATH: getOptionalInput('CONFIG_PATH', '.github/sync.yml'),
     INLINE_CONFIG: getOptionalInput('INLINE_CONFIG', ''),
-    IS_FINE_GRAINED: getBooleanInput('IS_FINE_GRAINED', false),
+    IS_FINE_GRAINED: token.startsWith('github_pat_'),
     COMMIT_BODY: getOptionalInput('COMMIT_BODY', ''),
     COMMIT_PREFIX: getOptionalInput('COMMIT_PREFIX', '🔄'),
     COMMIT_EACH_FILE: getBooleanInput('COMMIT_EACH_FILE', true),

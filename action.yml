@@ -4,16 +4,15 @@ description: GitHub Action to Sync Files like Workflows Between Repositories.
 author: Raven Actions
 
 inputs:
-  GH_PAT:
+  GH_TOKEN:
     description: |
-      GitHub Personal Access Token used to access target repositories.
-      Note: `GITHUB_TOKEN` will not work for cross-repo sync.
-    required: false
-  GH_INSTALLATION_TOKEN:
-    description: |
-      GitHub App Installation Token used to access target repositories.
-      When set, commits are created using the GitHub API.
-    required: false
+      Token used to access target repositories. Accepts a Personal Access Token
+      (classic or fine-grained) or a GitHub App installation token; the type is
+      detected automatically from the token prefix.
+      When an installation token (prefix `ghs_`) is supplied, commits are created
+      through the GitHub API (verified) and GIT_EMAIL/GIT_USERNAME are required.
+      Note: the default `GITHUB_TOKEN` will not work for cross-repo sync.
+    required: true
   CONFIG_PATH:
     description: |
       Path to the sync configuration file.
@@ -23,11 +22,6 @@ inputs:
     description: |
       Inline YAML configuration (alternative to CONFIG_PATH).
       When set, this is used instead of reading CONFIG_PATH.
-    required: false
-  IS_FINE_GRAINED:
-    description: |
-      Set to true if GH_PAT is a fine-grained token.
-      Defaults to false.
     required: false
   PR_LABELS:
     description: |
@@ -79,12 +73,12 @@ inputs:
   GIT_EMAIL:
     description: |
       Email used for commits.
-      Required when using GH_INSTALLATION_TOKEN.
+      Required when using a GitHub App installation token.
     required: false
   GIT_USERNAME:
     description: |
       Username used for commits.
-      Required when using GH_INSTALLATION_TOKEN.
+      Required when using a GitHub App installation token.
     required: false
   TMP_DIR:
     description: |
