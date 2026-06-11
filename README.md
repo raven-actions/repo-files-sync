@@ -57,7 +57,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Run Files Sync
-        uses: raven-actions/repo-files-sync@v0.1.0
+        uses: raven-actions/repo-files-sync@v0.1.0-rc.12
         with:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
 ```
@@ -98,7 +98,7 @@ More info on how to specify what files to sync where [below](#%EF%B8%8F-sync-con
 This action publishes only **exact, immutable version tags** (for example `v1.0.0`). There are intentionally no floating `latest`, `v1`, or `v1.2` aliases, so pin to a specific release and a new version can never change your workflow unexpectedly:
 
 ```yml
-uses: raven-actions/repo-files-sync@v0.1.0
+uses: raven-actions/repo-files-sync@v0.1.0-rc.12
 ```
 
 To stay up to date, let [Dependabot keep the pinned version current](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot) for you:
@@ -195,7 +195,7 @@ Instead of using a configuration file, you can provide the sync configuration di
 
 ```yml
 - name: Run Files Sync
-  uses: raven-actions/repo-files-sync@v0.1.0
+  uses: raven-actions/repo-files-sync@v0.1.0-rc.12
   with:
     GH_TOKEN: ${{ secrets.GH_TOKEN }}
     INLINE_CONFIG: |
@@ -562,7 +562,7 @@ By default [repo-files-sync](https://github.com/raven-actions/repo-files-sync) w
 
 ```yml
 - name: Run GitHub File Sync
-  uses: raven-actions/repo-files-sync@v0.1.0
+  uses: raven-actions/repo-files-sync@v0.1.0-rc.12
   with:
     GH_TOKEN: ${{ secrets.GH_TOKEN }}
     PR_LABELS: |
@@ -578,7 +578,7 @@ You can tell [repo-files-sync](https://github.com/raven-actions/repo-files-sync)
 
 ```yml
 - name: Run GitHub File Sync
-  uses: raven-actions/repo-files-sync@v0.1.0
+  uses: raven-actions/repo-files-sync@v0.1.0-rc.12
   with:
     GH_TOKEN: ${{ secrets.GH_TOKEN }}
     ASSIGNEES: raven-actions
@@ -592,7 +592,7 @@ You can tell [repo-files-sync](https://github.com/raven-actions/repo-files-sync)
 
 ```yml
 - name: Run GitHub File Sync
-  uses: raven-actions/repo-files-sync@v0.1.0
+  uses: raven-actions/repo-files-sync@v0.1.0-rc.12
   with:
     GH_TOKEN: ${{ secrets.GH_TOKEN }}
     REVIEWERS: |
@@ -632,7 +632,7 @@ If your repo name contains invalid characters, like a dot ([#32](https://github.
 **.github/workflows/sync.yml**
 
 ```yml
-uses: raven-actions/repo-files-sync@v0.1.0
+uses: raven-actions/repo-files-sync@v0.1.0-rc.12
 with:
     GH_TOKEN: ${{ secrets.GH_TOKEN }}
     BRANCH_PREFIX: custom-branch
@@ -650,7 +650,7 @@ You can specify a custom commit body. This will be appended to the commit messag
 
 ```yml
 - name: Run GitHub File Sync
-  uses: raven-actions/repo-files-sync@v0.1.0
+  uses: raven-actions/repo-files-sync@v0.1.0-rc.12
   with:
     GH_TOKEN: ${{ secrets.GH_TOKEN }}
     COMMIT_BODY: "Change-type: patch"
@@ -672,7 +672,7 @@ You can add more content to the PR body with the `PR_BODY` option. For example:
 
 ```yml
 - name: Run GitHub File Sync
-  uses: raven-actions/repo-files-sync@v0.1.0
+  uses: raven-actions/repo-files-sync@v0.1.0-rc.12
   with:
     GH_TOKEN: ${{ secrets.GH_TOKEN }}
     PR_BODY: This is your custom PR Body
@@ -701,7 +701,7 @@ A fork of each target repository will be created on this account, and all change
 Note: while you can open pull requests to target repositories without write access, some features, like applying labels, are not possible.
 
 ```yml
-uses: raven-actions/repo-files-sync@v0.1.0
+uses: raven-actions/repo-files-sync@v0.1.0-rc.12
 with:
     GH_TOKEN: ${{ secrets.GH_TOKEN }}
     FORK: file-sync-bot
