@@ -115,8 +115,10 @@ split_commits = false
 #{ pattern = '.*', replace_command = 'typos --write-changes -' },
 # ]
 commit_preprocessors = [
-    # Remove GitHub's squash-merge PR suffix; the template adds the canonical PR link.
-    { pattern = ' \(#[0-9]+\)$', replace = "" },
+    # Remove GitHub's squash-merge PR suffix from the subject; the template adds
+    # the canonical PR link after the author. Preserve the newline when a commit
+    # body follows the subject.
+    { pattern = ' \(#[0-9]+\)(\r?\n|$)', replace = "${1}" },
     # Replace issue/PR numbers with links (using <REPO> placeholder resolved by postprocessors).
     { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "([#${2}](<REPO>/pull/${2}))" },
     # Remove gitmoji, both actual UTF emoji and :emoji:
