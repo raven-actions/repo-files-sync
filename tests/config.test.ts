@@ -38,7 +38,7 @@ describe('config.ts - Configuration Parsing', () => {
 
     // Set minimum required inputs
     setMockInputs({
-      GH_PAT: 'test-token',
+      GH_TOKEN: 'test-token',
       GITHUB_REPOSITORY: 'test/repo'
     });
 

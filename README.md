@@ -59,21 +59,21 @@ jobs:
       - name: Run Files Sync
         uses: raven-actions/repo-files-sync@v1.0.0
         with:
-          GH_PAT: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
 ```
 
 #### Token
 
-In order for the Action to access your repositories you have to specify a [Personal Access token](https://docs.github.com/en/free-pro-team@latest/github/authenticating-to-github/creating-a-personal-access-token) as the value for `GH_PAT` (`GITHUB_TOKEN` will **not** work). The PAT needs the full repo scope ([#31](https://github.com/raven-actions/repo-files-sync/discussions/31#discussioncomment-674804)).
+In order for the Action to access your repositories you have to provide a token as the value for `GH_TOKEN` (`GITHUB_TOKEN` will **not** work for cross-repo sync). The action accepts either a [Personal Access Token](https://docs.github.com/en/free-pro-team@latest/github/authenticating-to-github/creating-a-personal-access-token) (classic or fine-grained) or a GitHub App installation token, and detects the token type automatically from its prefix. A classic PAT needs the full repo scope ([#31](https://github.com/raven-actions/repo-files-sync/discussions/31#discussioncomment-674804)).
 
 It is recommended to set the token as a
 [Repository Secret](https://docs.github.com/en/free-pro-team@latest/actions/reference/encrypted-secrets#creating-encrypted-secrets-for-a-repository).
 
-Alternatively, you can provide the token of a GitHub App Installation via the `GH_INSTALLATION_TOKEN` input. You can obtain such token for example via [this](https://github.com/marketplace/actions/github-app-token) action. Tokens from apps have the advantage that they provide more granular access control.
+A GitHub App installation token (prefix `ghs_`) can be used instead. You can obtain such a token for example via [this](https://github.com/marketplace/actions/create-github-app-token) action. Tokens from apps have the advantage that they provide more granular access control, and commits are created through the GitHub API as verified commits.
 
 The app needs to be configured for each repo you want to sync to, and have the `Contents` read & write and `Metadata` read-only permission. If you want to use PRs (default setting) you additionally need `Pull requests` read & write access, and to sync workflow files you need `Workflows` read & write access.
 
-If using an installation token you are required to provide the `GIT_EMAIL` and `GIT_USERNAME` input.
+When using an installation token you are required to provide the `GIT_EMAIL` and `GIT_USERNAME` input. Fine-grained PATs (prefix `github_pat_`) are detected automatically.
 
 ### Sync configuration
 
@@ -133,11 +133,9 @@ Here are all the inputs [repo-files-sync](https://github.com/raven-actions/repo-
 
 | Key                     | Value                                                                                                                                          | Required                                         | Default                        |
 |-------------------------|------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------|--------------------------------|
-| `GH_PAT`                | Your [Personal Access token](https://docs.github.com/en/free-pro-team@latest/github/authenticating-to-github/creating-a-personal-access-token) | **`GH_PAT` or `GH_INSTALLATION_TOKEN` required** | N/A                            |
-| `GH_INSTALLATION_TOKEN` | Token from a GitHub App installation                                                                                                           | **`GH_PAT` or `GH_INSTALLATION_TOKEN` required** | N/A                            |
+| `GH_TOKEN`              | A Personal Access Token (classic or fine-grained) or a GitHub App installation token; type auto-detected from prefix                           | **Yes**                                          | N/A                            |
 | `CONFIG_PATH`           | Path to the sync configuration file                                                                                                            | **No**                                           | .github/sync.yml               |
 | `INLINE_CONFIG`         | Inline YAML configuration (alternative to CONFIG_PATH)                                                                                         | **No**                                           | N/A                            |
-| `IS_FINE_GRAINED`       | Labels the GH_PAT as a fine grained token                                                                                                      | **No**                                           | false                          |
 | `PR_LABELS`             | Labels which will be added to the pull request. Set to false to turn off                                                                       | **No**                                           | sync                           |
 | `ASSIGNEES`             | Users to assign to the pull request                                                                                                            | **No**                                           | N/A                            |
 | `REVIEWERS`             | Users to request a review of the pull request from                                                                                             | **No**                                           | N/A                            |
@@ -199,7 +197,7 @@ Instead of using a configuration file, you can provide the sync configuration di
 - name: Run Files Sync
   uses: raven-actions/repo-files-sync@v1.0.0
   with:
-    GH_PAT: ${{ secrets.GH_PAT }}
+    GH_TOKEN: ${{ secrets.GH_TOKEN }}
     INLINE_CONFIG: |
       user/repo:
         - LICENSE
@@ -566,7 +564,7 @@ By default [repo-files-sync](https://github.com/raven-actions/repo-files-sync) w
 - name: Run GitHub File Sync
   uses: raven-actions/repo-files-sync@v1.0.0
   with:
-    GH_PAT: ${{ secrets.GH_PAT }}
+    GH_TOKEN: ${{ secrets.GH_TOKEN }}
     PR_LABELS: |
       file-sync
       automerge
@@ -582,7 +580,7 @@ You can tell [repo-files-sync](https://github.com/raven-actions/repo-files-sync)
 - name: Run GitHub File Sync
   uses: raven-actions/repo-files-sync@v1.0.0
   with:
-    GH_PAT: ${{ secrets.GH_PAT }}
+    GH_TOKEN: ${{ secrets.GH_TOKEN }}
     ASSIGNEES: raven-actions
 ```
 
@@ -596,7 +594,7 @@ You can tell [repo-files-sync](https://github.com/raven-actions/repo-files-sync)
 - name: Run GitHub File Sync
   uses: raven-actions/repo-files-sync@v1.0.0
   with:
-    GH_PAT: ${{ secrets.GH_PAT }}
+    GH_TOKEN: ${{ secrets.GH_TOKEN }}
     REVIEWERS: |
       raven-actions
       raven-actions-bot
@@ -636,7 +634,7 @@ If your repo name contains invalid characters, like a dot ([#32](https://github.
 ```yml
 uses: raven-actions/repo-files-sync@v1.0.0
 with:
-    GH_PAT: ${{ secrets.GH_PAT }}
+    GH_TOKEN: ${{ secrets.GH_TOKEN }}
     BRANCH_PREFIX: custom-branch
 ```
 
@@ -654,7 +652,7 @@ You can specify a custom commit body. This will be appended to the commit messag
 - name: Run GitHub File Sync
   uses: raven-actions/repo-files-sync@v1.0.0
   with:
-    GH_PAT: ${{ secrets.GH_PAT }}
+    GH_TOKEN: ${{ secrets.GH_TOKEN }}
     COMMIT_BODY: "Change-type: patch"
 ```
 
@@ -676,7 +674,7 @@ You can add more content to the PR body with the `PR_BODY` option. For example:
 - name: Run GitHub File Sync
   uses: raven-actions/repo-files-sync@v1.0.0
   with:
-    GH_PAT: ${{ secrets.GH_PAT }}
+    GH_TOKEN: ${{ secrets.GH_TOKEN }}
     PR_BODY: This is your custom PR Body
 ```
 
@@ -705,7 +703,7 @@ Note: while you can open pull requests to target repositories without write acce
 ```yml
 uses: raven-actions/repo-files-sync@v1.0.0
 with:
-    GH_PAT: ${{ secrets.GH_PAT }}
+    GH_TOKEN: ${{ secrets.GH_TOKEN }}
     FORK: file-sync-bot
 ```
 

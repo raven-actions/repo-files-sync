@@ -57,7 +57,7 @@ describe('config.ts - parseConfig function', () => {
     process.env['GITHUB_SERVER_URL'] = 'https://github.com';
 
     // Set minimum required inputs
-    mockInputs['GH_PAT'] = 'test-token';
+    mockInputs['GH_TOKEN'] = 'test-token';
     mockInputs['GITHUB_REPOSITORY'] = 'test-owner/test-repo';
     mockInputs['CONFIG_PATH'] = '.github/sync.yml';
   });
@@ -419,30 +419,42 @@ describe('config.ts - context initialization', () => {
     vi.resetModules();
   });
 
-  it('should initialize with GH_PAT token', async () => {
-    mockInputs['GH_PAT'] = 'my-pat-token';
+  it('should initialize with a classic PAT', async () => {
+    mockInputs['GH_TOKEN'] = 'ghp_my-pat-token';
     mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
     mockFileContents['.github/sync.yml'] = 'user/repo:\n  - file.txt';
 
     const config = await import('../src/config.js');
 
-    expect(config.default.GITHUB_TOKEN).toBe('my-pat-token');
+    expect(config.default.GITHUB_TOKEN).toBe('ghp_my-pat-token');
     expect(config.default.IS_INSTALLATION_TOKEN).toBe(false);
+    expect(config.default.IS_FINE_GRAINED).toBe(false);
   });
 
-  it('should initialize with installation token when GH_PAT not provided', async () => {
-    mockInputs['GH_INSTALLATION_TOKEN'] = 'my-installation-token';
+  it('should detect an installation token from the ghs_ prefix', async () => {
+    mockInputs['GH_TOKEN'] = 'ghs_my-installation-token';
     mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
     mockFileContents['.github/sync.yml'] = 'user/repo:\n  - file.txt';
 
     const config = await import('../src/config.js');
 
-    expect(config.default.GITHUB_TOKEN).toBe('my-installation-token');
+    expect(config.default.GITHUB_TOKEN).toBe('ghs_my-installation-token');
     expect(config.default.IS_INSTALLATION_TOKEN).toBe(true);
   });
 
+  it('should detect a fine-grained PAT from the github_pat_ prefix', async () => {
+    mockInputs['GH_TOKEN'] = 'github_pat_abc123';
+    mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
+    mockFileContents['.github/sync.yml'] = 'user/repo:\n  - file.txt';
+
+    const config = await import('../src/config.js');
+
+    expect(config.default.IS_FINE_GRAINED).toBe(true);
+    expect(config.default.IS_INSTALLATION_TOKEN).toBe(false);
+  });
+
   it('should use default CONFIG_PATH', async () => {
-    mockInputs['GH_PAT'] = 'token';
+    mockInputs['GH_TOKEN'] = 'token';
     mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
     mockFileContents['.github/sync.yml'] = 'user/repo:\n  - file.txt';
 
@@ -452,7 +464,7 @@ describe('config.ts - context initialization', () => {
   });
 
   it('should use custom CONFIG_PATH when provided', async () => {
-    mockInputs['GH_PAT'] = 'token';
+    mockInputs['GH_TOKEN'] = 'token';
     mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
     mockInputs['CONFIG_PATH'] = 'custom/path/sync.yml';
     mockFileContents['custom/path/sync.yml'] = 'user/repo:\n  - file.txt';
@@ -463,7 +475,7 @@ describe('config.ts - context initialization', () => {
   });
 
   it('should set PR_LABELS from input', async () => {
-    mockInputs['GH_PAT'] = 'token';
+    mockInputs['GH_TOKEN'] = 'token';
     mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
     mockInputs['PR_LABELS'] = 'label1,label2,label3';
     mockFileContents['.github/sync.yml'] = 'user/repo:\n  - file.txt';
@@ -474,7 +486,7 @@ describe('config.ts - context initialization', () => {
   });
 
   it('should set boolean options from input', async () => {
-    mockInputs['GH_PAT'] = 'token';
+    mockInputs['GH_TOKEN'] = 'token';
     mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
     mockInputs['DRY_RUN'] = 'true';
     mockInputs['SKIP_PR'] = 'true';
@@ -489,7 +501,7 @@ describe('config.ts - context initialization', () => {
   });
 
   it('should set BRANCH_PREFIX from input', async () => {
-    mockInputs['GH_PAT'] = 'token';
+    mockInputs['GH_TOKEN'] = 'token';
     mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
     mockInputs['BRANCH_PREFIX'] = 'custom-prefix/';
     mockFileContents['.github/sync.yml'] = 'user/repo:\n  - file.txt';
@@ -500,7 +512,7 @@ describe('config.ts - context initialization', () => {
   });
 
   it('should default deleteOrphaned from input when not set on files', async () => {
-    mockInputs['GH_PAT'] = 'token';
+    mockInputs['GH_TOKEN'] = 'token';
     mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
     mockInputs['DELETE_ORPHANED'] = 'true';
     mockFileContents['.github/sync.yml'] = 'user/repo:\n  - source: src/\n    dest: dest/';
