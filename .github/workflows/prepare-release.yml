@@ -46,9 +46,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      # The final release reuses the last RC's curated commit, so a matching
-      # prerelease/<version> branch must exist. Fail early with guidance if not.
-      - name: Verify a release candidate exists
+      # The final release must reuse the latest PUBLISHED RC. A draft RC updates
+      # the prerelease/<version> branch before it creates a git tag, so require
+      # the branch tip to match the latest promoted vX.Y.Z-rc.N tag.
+      - name: Verify a published release candidate exists
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.notes.outputs.version }}
@@ -59,11 +60,23 @@ jobs:
             echo "::error::Nothing to release: computed version ${VERSION} equals the latest release ${latest}."
             exit 1
           fi
-          if ! gh api "repos/${GITHUB_REPOSITORY}/git/refs/heads/prerelease/${VERSION}" >/dev/null 2>&1; then
+          branch_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/refs/heads/prerelease/${VERSION}" --jq '.object.sha' 2>/dev/null || true)"
+          if [ -z "${branch_sha}" ]; then
             echo "::error::No release candidate branch prerelease/${VERSION}. Merge changes to main and let an RC build first."
             exit 1
           fi
-          echo "Release candidate branch prerelease/${VERSION} found."
+          last_n="$(git tag --list "${VERSION}-rc.*" | sed 's/.*-rc\.//' | grep -E '^[0-9]+$' | sort -n | tail -n1 || true)"
+          if [ -z "${last_n}" ]; then
+            echo "::error::No published release candidate tag for ${VERSION}. Publish the current draft RC before preparing the final release."
+            exit 1
+          fi
+          rc_tag="${VERSION}-rc.${last_n}"
+          rc_sha="$(git rev-list -n 1 "${rc_tag}")"
+          if [ "${branch_sha}" != "${rc_sha}" ]; then
+            echo "::error::prerelease/${VERSION} points at ${branch_sha}, but latest published RC ${rc_tag} points at ${rc_sha}. Publish the current draft RC before preparing the final release."
+            exit 1
+          fi
+          echo "Published release candidate ${rc_tag} found at branch tip ${branch_sha}."
 
       # Regenerate the full CHANGELOG.md file (all releases + the bumped one).
       - name: Generate CHANGELOG.md

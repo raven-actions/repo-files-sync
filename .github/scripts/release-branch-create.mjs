@@ -13,6 +13,7 @@ import path from 'node:path'
  * - BRANCH_PREFIX (optional): Branch prefix, default: "release"
  * - COMMIT_MESSAGE (optional): Commit message template, use {tag} placeholder, default: "chore(release): {tag}"
  * - BASE_BRANCH (optional): Base branch to create release from, default: "main"
+ * - BASE_SHA (optional): Parent commit SHA to use instead of resolving BASE_BRANCH
  * - DELETE_EXISTING (optional): Delete existing branch if exists, default: "true"
  *
  * @param {Object} params
@@ -31,6 +32,7 @@ export default async function main({ context, github, core }) {
   const branchPrefix = core.getInput('BRANCH_PREFIX') || 'release'
   const commitMessageTemplate = core.getInput('COMMIT_MESSAGE') || 'chore(release): {tag}'
   const baseBranch = core.getInput('BASE_BRANCH') || 'main'
+  const baseSha = core.getInput('BASE_SHA')
 
   // getBooleanInput throws if value is not a valid YAML boolean, so we need to check if input exists first
   const deleteExistingInput = core.getInput('DELETE_EXISTING')
@@ -64,14 +66,23 @@ export default async function main({ context, github, core }) {
     }
   }
 
-  // Get base branch HEAD SHA (parent for new commit)
-  core.info(`Getting ${baseBranch} branch HEAD...`)
-  const { data: baseRef } = await github.rest.git.getRef({
-    owner,
-    repo,
-    ref: `heads/${baseBranch}`
-  })
-  const parentSha = baseRef.object.sha
+  // Get parent SHA for the new commit. Prerelease workflows pass the exact CI-tested
+  // SHA so the curated release commit cannot accidentally parent a newer main tip.
+  let parentSha = baseSha
+  if (parentSha) {
+    if (!/^[0-9a-f]{40}$/i.test(parentSha)) {
+      throw new Error(`BASE_SHA must be a full 40-character commit SHA: ${parentSha}`)
+    }
+    core.info(`Using explicit base SHA ${parentSha}`)
+  } else {
+    core.info(`Getting ${baseBranch} branch HEAD...`)
+    const { data: baseRef } = await github.rest.git.getRef({
+      owner,
+      repo,
+      ref: `heads/${baseBranch}`
+    })
+    parentSha = baseRef.object.sha
+  }
 
   /**
    * Create a blob from file content
