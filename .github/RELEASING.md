@@ -48,7 +48,9 @@ branch tip and advances the proposed number for the next draft.
    workflow). It:
    - computes the target version and the **full** notes since the last final
      release,
-   - verifies a `prerelease/vX.Y.Z` branch exists (i.e. an RC was cut),
+   - verifies a `prerelease/vX.Y.Z` branch exists and its tip matches the latest
+     published `vX.Y.Z-rc.N` tag (publish the current draft RC first if the
+     branch has moved),
    - updates `CHANGELOG.md` and pins the `README.md` usage examples to
      `vX.Y.Z` (so the default branch docs match the published tag),
    - opens a PR titled `chore(release): vX.Y.Z` with the full notes as its body.

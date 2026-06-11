@@ -178,6 +178,7 @@ jobs:
         env:
           INPUT_TAG: ${{ steps.release-details.outputs.version }}
           INPUT_BRANCH_PREFIX: prerelease
+          INPUT_BASE_SHA: ${{ github.event.workflow_run.head_sha }}
           INPUT_FILES: |
             LICENSE
             README.md
@@ -218,7 +219,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           RC_TAG: ${{ steps.rc.outputs.rc_tag }}
-          TARGET: ${{ steps.release-branch.outputs.name }}
+          # Target the exact curated commit, not a moving branch name. The branch
+          # remains as the in-flight carrier, but publishing this draft will create
+          # the RC tag at the same reviewed commit even if main advances later.
+          TARGET: ${{ steps.release-branch.outputs.sha }}
           # Passed via env (not inlined) so the notes content cannot break out of
           # the shell command; written to a file for --notes-file.
           BODY: ${{ steps.rc-notes.outputs.content }}
