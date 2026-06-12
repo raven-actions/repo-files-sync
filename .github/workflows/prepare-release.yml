@@ -98,7 +98,11 @@ jobs:
           VERSION: ${{ steps.notes.outputs.version }}
           REPO: ${{ github.repository }}
         run: |
-          sed -i -E "s#(${REPO}@)v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?#\1${VERSION}#g" README.md
+          # Escape regex metacharacters in the repo slug before using it in the
+          # sed pattern, so a slug with '.', '+', etc. is matched literally
+          # (mirrors the escaping the .mjs release scripts already do).
+          esc_repo="$(printf '%s' "${REPO}" | sed 's#[^A-Za-z0-9_/-]#\\&#g')"
+          sed -i -E "s#(${esc_repo}@)v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?#\1${VERSION}#g" README.md
           echo "README now pins ${REPO}@${VERSION}:"
           grep -n "${REPO}@" README.md || true
 

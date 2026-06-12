@@ -147,6 +147,10 @@ commit_parsers = [
     { message = "^test", group = "<!-- 8 -->🧪 Testing" },
     { message = "^chore\\(release\\)", skip = true },
     { message = "^chore\\(deps.*\\)", skip = true },
+    # Dependabot is configured with the `ci` prefix (see .github/dependabot.yml),
+    # so its commits arrive as `ci(deps...)`; skip them like the chore(deps) form
+    # above so dependency bumps stay out of the release notes.
+    { message = "^ci\\(deps.*\\)", skip = true },
     { message = "^chore\\(pr\\)", skip = true },
     { message = "^chore\\(pull\\)", skip = true },
     { message = "^chore|^ci", group = "<!-- 9 -->🌀 Miscellaneous Tasks" },

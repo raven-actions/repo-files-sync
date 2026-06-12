@@ -59,7 +59,9 @@ jobs:
         with:
           name: dist
           path: dist/
-          retention-days: 1
+          # Short-lived hand-off to the prerelease job in the same run. Kept at a
+          # few days (not 1) so a delayed re-run of that job can still find it.
+          retention-days: 5
 
   prerelease:
     name: Prerelease
@@ -163,7 +165,11 @@ jobs:
           RC_TAG: ${{ steps.rc.outputs.rc_tag }}
           REPO: ${{ github.repository }}
         run: |
-          sed -i -E "s#(${REPO}@)v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?#\1${RC_TAG}#g" README.md
+          # Escape regex metacharacters in the repo slug before using it in the
+          # sed pattern, so a slug with '.', '+', etc. is matched literally
+          # (mirrors the escaping the .mjs release scripts already do).
+          esc_repo="$(printf '%s' "${REPO}" | sed 's#[^A-Za-z0-9_/-]#\\&#g')"
+          sed -i -E "s#(${esc_repo}@)v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?#\1${RC_TAG}#g" README.md
           echo "README now pins ${REPO}@${RC_TAG}:"
           grep -n "${REPO}@" README.md || true
 
