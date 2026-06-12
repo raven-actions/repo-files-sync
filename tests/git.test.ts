@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as core from '@actions/core';
 import * as os from 'os';
 
 // Hoist mocks to be available before module imports
@@ -159,6 +160,35 @@ describe('git.ts - Git class', () => {
         expect.arrayContaining(['config', '--local', 'user.name']),
         expect.any(String)
       );
+    });
+
+    it('should flag an empty repository and skip rev-parse calls', async () => {
+      // `git rev-list -n 1 --all` returns nothing when the default branch has no commits yet
+      execGitMock.mockImplementation((args: string[]) =>
+        Promise.resolve(args[0] === 'rev-list' ? '' : 'main')
+      );
+
+      await git.initRepo(mockRepoInfo);
+
+      expect(git.isEmptyRepo).toBe(true);
+      expect(vi.mocked(core.warning)).toHaveBeenCalledWith(expect.stringContaining('no commits'));
+
+      // getBaseBranch / getLastCommitSha must not run on an empty repo
+      const revParseCalls = execGitMock.mock.calls.filter(
+        (call) => Array.isArray(call[0]) && call[0][0] === 'rev-parse'
+      );
+      expect(revParseCalls).toHaveLength(0);
+    });
+
+    it('should not flag a repository that has commits', async () => {
+      execGitMock.mockImplementation((args: string[]) =>
+        Promise.resolve(args[0] === 'rev-list' ? 'abc123' : 'main')
+      );
+
+      await git.initRepo(mockRepoInfo);
+
+      expect(git.isEmptyRepo).toBe(false);
+      expect(execGitMock).toHaveBeenCalledWith(['rev-parse', 'HEAD'], expect.any(String));
     });
   });
 
@@ -339,6 +369,10 @@ describe('git.ts - Git class', () => {
       execGitMock.mockImplementation((args: string[]) => {
         if (Array.isArray(args) && args.join(' ') === 'rev-parse --abbrev-ref HEAD') {
           return Promise.resolve('main');
+        }
+        // Non-empty rev-list output so the repo isn't treated as empty
+        if (Array.isArray(args) && args[0] === 'rev-list') {
+          return Promise.resolve('abc123');
         }
         return Promise.resolve('');
       });
