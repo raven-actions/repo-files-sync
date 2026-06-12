@@ -141,6 +141,13 @@ async function processRepo(git: Git, item: RepoConfig): Promise<string | undefin
     // Clone and setup the git repository locally
     await git.initRepo(item.repo, item.branchSuffix);
 
+    // A target repo whose default branch has no commits yet can't be synced;
+    // initRepo flags it so we skip cleanly instead of failing the whole run.
+    if (git.isEmptyRepo) {
+      core.warning(`Skipping ${item.repo.fullName}: default branch has no commits yet`);
+      return undefined;
+    }
+
     let existingPr: Awaited<ReturnType<typeof git.findExistingPr>> | undefined;
 
     if (!SKIP_PR) {

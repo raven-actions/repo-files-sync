@@ -58,6 +58,7 @@ export default class Git {
   private lastCommitChanges: GitDiffDict | undefined;
   private remoteBranchHead: string | undefined;
   private forceUpdateBranch = false;
+  public isEmptyRepo = false;
   public workingDir!: string;
 
   constructor() {
@@ -106,6 +107,7 @@ export default class Git {
     this.remoteBranchHead = undefined;
     this.forceUpdateBranch = false;
     this.lastCommitChanges = undefined;
+    this.isEmptyRepo = false;
 
     // Set values to current repo
     this.repo = repo;
@@ -117,6 +119,17 @@ export default class Git {
 
     await this.clone();
     await this.setIdentity();
+
+    // A freshly created target repo can have a default branch with no commits
+    // (unborn HEAD). The rev-parse calls below would otherwise fail with
+    // "ambiguous argument 'HEAD'" and abort the entire run, so detect it here
+    // and let the caller skip the repo instead.
+    this.isEmptyRepo = await this.hasNoCommits();
+    if (this.isEmptyRepo) {
+      core.warning(`${repo.fullName} has no commits on the default branch — skipping`);
+      return;
+    }
+
     await this.getBaseBranch();
     await this.getLastCommitSha();
 
@@ -339,6 +352,16 @@ export default class Git {
 
   async getLastCommitSha(): Promise<void> {
     this.lastCommitSha = await execGit(['rev-parse', 'HEAD'], this.workingDir);
+  }
+
+  /**
+   * Detects an empty repository (default branch with no commits / unborn HEAD).
+   * `git rev-list -n 1 --all` exits 0 in both cases, printing the newest commit
+   * sha or nothing when the repository has no commits yet.
+   */
+  private async hasNoCommits(): Promise<boolean> {
+    const output = await execGit(['rev-list', '-n', '1', '--all'], this.workingDir);
+    return output.trim().length === 0;
   }
 
   /**
