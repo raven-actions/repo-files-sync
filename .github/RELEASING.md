@@ -57,7 +57,8 @@ flowchart TD
     class DRAFT,SKIP,PUBFIRST,RELPR neutral;
 ```
 
-**Bold arrows** are the three manual maintainer gates - publish a draft to mint the `vX.Y.Z-rc.N` tag, run **Prepare Release**, and review & merge the release PR. **Dotted arrows** are skip / loop / return / cleanup paths; solid arrows are automated hand-offs. Green nodes are the immutable, published artifacts (RC tags and the final release); blue nodes are the workflows that produce them.
+- **Bold arrows** are the three manual maintainer gates - publish a draft to mint the `vX.Y.Z-rc.N` tag, run **Prepare Release**, and review & merge the release PR.
+- **Dotted arrows** are skip / loop / return / cleanup paths; solid arrows are automated hand-offs. Green nodes are the immutable, published artifacts (RC tags and the final release); blue nodes are the workflows that produce them.
 
 ## How a release candidate is produced
 
