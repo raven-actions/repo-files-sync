@@ -33,6 +33,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          # Check out the PR base commit (main as it was before this PR merged),
+          # not the merge result. The privileged release-finalize script is
+          # imported from the workspace, so pinning to the base SHA guarantees it
+          # is the trusted version already on main and cannot be something the
+          # merged release PR introduced. fetch-depth: 0 still fetches all tags.
+          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
           persist-credentials: false
 

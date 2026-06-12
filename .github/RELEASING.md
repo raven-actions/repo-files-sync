@@ -17,11 +17,74 @@ break-glass procedures.
   commit with the README usage examples re-pinned from the RC tag to the final
   `vX.Y.Z`; only the README changes, so `dist/` stays byte-identical to the RC.
 
+## Lifecycle at a glance
+
+```mermaid
+flowchart TD
+    subgraph merge_cycle["Per merge to main · automated"]
+        direction TB
+        PR["PR merged to main<br/>(squash · Conventional Commit)"]
+        CI["CI workflow<br/>lint · typecheck · build · test"]
+        SKIP["Skipped · no-op<br/>(chore release commit or no version bump)"]
+        PRE["Prerelease workflow<br/>rebuild dist + SLSA provenance<br/>pin README to vX.Y.Z-rc.N<br/>verified commit on prerelease/vX.Y.Z"]
+        DRAFT["Draft prerelease vX.Y.Z-rc.N<br/>overwritten in place each run"]
+        PR --> CI
+        CI -->|"success & releasable"| PRE
+        CI -.->|"not releasable"| SKIP
+        PRE --> DRAFT
+        DRAFT -.->|"next merge to main"| PR
+    end
+
+    RCTAG["Immutable RC tag vX.Y.Z-rc.N<br/>(proposed number advances)"]
+
+    subgraph final_cut["Cut the final release"]
+        direction TB
+        PREP["Prepare Release workflow<br/>full notes + CHANGELOG<br/>pin README to vX.Y.Z"]
+        VERIFY{"prerelease/vX.Y.Z tip<br/>matches latest RC tag?"}
+        PUBFIRST["Publish the pending draft RC,<br/>then re-run Prepare Release"]
+        RELPR["Release PR · chore release: vX.Y.Z"]
+        PUB["Publish Release workflow<br/>re-pin README to vX.Y.Z · dist unchanged<br/>tag · mark latest · delete release branches"]
+        FINAL["Final release vX.Y.Z<br/>tagged at the last RC commit"]
+        PREP --> VERIFY
+        VERIFY -.->|no| PUBFIRST
+        VERIFY -->|yes| RELPR
+        RELPR ==>|"review & merge"| PUB
+        PUB --> FINAL
+    end
+
+    CLEAN["Cleanup Release Branches<br/>weekly / on demand"]
+
+    DRAFT ==>|"Publish release"| RCTAG
+    RCTAG ==>|"run Prepare Release"| PREP
+    PUBFIRST -.-> PREP
+    CLEAN -.->|"remove orphaned prerelease/* and release-prep/*"| FINAL
+
+    classDef auto fill:#cfe2ff,stroke:#0d6efd,color:#03204e;
+    classDef artifact fill:#d1e7dd,stroke:#198754,color:#0a3622;
+    classDef neutral fill:#e2e3e5,stroke:#6c757d,color:#1b1e21;
+    class CI,PRE,PREP,PUB,CLEAN auto;
+    class RCTAG,FINAL artifact;
+    class DRAFT,SKIP,PUBFIRST,RELPR neutral;
+```
+
+**Bold arrows** are the three manual maintainer gates - publish a draft to mint
+the `vX.Y.Z-rc.N` tag, run **Prepare Release**, and review & merge the release PR.
+**Dotted arrows** are skip / loop / return / cleanup paths; solid arrows are
+automated hand-offs. Green nodes are the immutable, published artifacts (RC tags
+and the final release); blue nodes are the workflows that produce them.
+
 ## How a release candidate is produced
 
 1. **Merge to `main`.** PR titles must follow [Conventional Commits](https://www.conventionalcommits.org)
    (enforced by the `PR Title` workflow). With squash-merge the PR title becomes
    the commit subject that drives version bumping. **Use squash merges.**
+
+   > Because version bumping and changelog generation read the squashed commit
+   > subject, configure the repository to **allow squash merging only** (Settings
+   > -> General -> Pull Requests: enable "Allow squash merging", disable merge
+   > commits and rebase merging, and default the squash commit message to the PR
+   > title). A stray merge or rebase merge can land non-conventional subjects that
+   > break `git cliff --bump` and the notes.
 2. **CI** (`ci.yml`) runs lint, type-check, build, and the cross-OS test matrix.
 3. **Prerelease** (`prerelease.yml`) runs on CI success for `main` (and is skipped
    for `chore(release)` commits):
@@ -80,7 +143,7 @@ These cases are not covered by that on-publish cleanup:
 - a `release-prep/vX.Y.Z` branch whose release PR was **closed without merging**, and
 - legacy `prerelease/vX.Y.Z-rc.N` branches from an older per-RC design (the current
   pipeline keeps a single `prerelease/vX.Y.Z` carrier for the whole cycle, so any
-  -rc-suffixed branch is stale — its commit is already preserved by the `vX.Y.Z-rc.N` tag).
+  -rc-suffixed branch is stale - its commit is already preserved by the `vX.Y.Z-rc.N` tag).
 
 The **Cleanup Release Branches** workflow (`cleanup-release-branches.yml`) handles
 all of them. It runs weekly and on demand, and keeps only the active in-flight
@@ -121,8 +184,18 @@ gh release edit "<prev-version>" --latest
 gh release edit "<bad-version>" --draft
 ```
 
-Consumers pinned to the bad exact tag recover by bumping to the fixed version
-once it ships (Dependabot raises that bump automatically).
+> **What this does and does not do.** Editing **Latest** and de-listing only
+> change *discoverability* (the badge, the Releases page, and where new adopters
+> land). They do **not** retract anything: the `vX.Y.Z` git tag still resolves, so
+> any workflow already pinned to the bad tag (or its commit SHA) keeps getting it
+> until it is bumped - the Actions ecosystem has no "yank". Deleting the release
+> does not delete the underlying git tag either; delete the tag explicitly if you
+> truly want `@vX.Y.Z` to stop resolving (still a breaking change for pinned
+> consumers, and a locked immutable tag may refuse deletion).
+
+The only real remedy is therefore the forward fix above: ship the next patch.
+Consumers pinned to the bad exact tag recover by bumping to it (Dependabot raises
+that bump automatically).
 
 ## Notes
 

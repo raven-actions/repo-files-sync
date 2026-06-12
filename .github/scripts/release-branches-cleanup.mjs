@@ -91,7 +91,7 @@ export default async function main({ context, github, core }) {
     }
   }
 
-  // prerelease/* — keep only the active in-flight carrier: the highest
+  // prerelease/* - keep only the active in-flight carrier: the highest
   // STABLE-named branch (`prerelease/vX.Y.Z`) that is still ahead of the latest
   // published stable release. Everything else is an orphan: superseded/shipped
   // stable carriers, and `prerelease/vX.Y.Z-rc.N` branches left behind by an
@@ -120,7 +120,7 @@ export default async function main({ context, github, core }) {
     toDelete.push(branch.name)
   }
 
-  // release-prep/* — keep only those still backing an OPEN release PR.
+  // release-prep/* - keep only those still backing an OPEN release PR.
   const openPrs = await github.paginate(github.rest.pulls.list, {
     owner,
     repo,
@@ -168,7 +168,7 @@ export default async function main({ context, github, core }) {
 
   await core.summary
     .addHeading('Release branch cleanup', 2)
-    .addRaw(dryRun ? 'Dry run — the following branches would be deleted:' : 'Deleted orphaned branches:')
+    .addRaw(dryRun ? 'Dry run - the following branches would be deleted:' : 'Deleted orphaned branches:')
     .addList(deleted)
     .write()
 }
