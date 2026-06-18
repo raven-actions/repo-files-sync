@@ -130,9 +130,16 @@ async function processFile(
  * Process a single repository sync
  */
 async function processRepo(git: Git, item: RepoConfig): Promise<string | undefined> {
-  core.info('Repository Info');
-  core.info(`Target Repo   : ${item.repo.user}/${item.repo.name}`)
-  core.info(`Target Url    : https://${item.repo.fullName}`)
+  const branchLabel = item.repo.branch && item.repo.branch !== 'default' ? `@${item.repo.branch}` : '';
+  const suffixLabel = item.branchSuffix ? ` (suffix: ${item.branchSuffix})` : '';
+
+  // Group every log line for this repo into a single collapsible section so the
+  // multi-repo output stays readable and each message is clearly attributed to
+  // the repository it belongs to.
+  core.startGroup(`${item.repo.user}/${item.repo.name}${branchLabel}${suffixLabel}`);
+
+  core.info(`Target Repo   : ${item.repo.user}/${item.repo.name}`);
+  core.info(`Target Url    : https://${item.repo.fullName}`);
   core.info(`Source Branch : ${item.repo.branch}`);
   core.info(`Branch Suffix : ${item.branchSuffix || 'n/a'}`);
   core.info(' ');
@@ -245,7 +252,7 @@ async function processRepo(git: Git, item: RepoConfig): Promise<string | undefin
 
       const pullRequest = await git.createOrUpdatePr(COMMIT_EACH_FILE ? changedFiles : '', prTitle);
 
-      core.notice(`Pull Request #${pullRequest.number} created/updated: ${pullRequest.html_url}`);
+      core.notice(`Pull Request #${pullRequest.number} ${pullRequest.action}: ${pullRequest.html_url}`);
 
       if (PR_LABELS && PR_LABELS.length > 0 && !FORK) {
         core.info(`Adding label(s) "${PR_LABELS.join(', ')}" to PR`);
@@ -271,7 +278,6 @@ async function processRepo(git: Git, item: RepoConfig): Promise<string | undefin
       return pullRequest.html_url;
     }
 
-    core.info('	');
     return undefined;
   } catch (err) {
     const error = err as Error;
@@ -281,6 +287,7 @@ async function processRepo(git: Git, item: RepoConfig): Promise<string | undefin
   } finally {
     // Cleanup working directory for this repo
     await git.cleanupRepo(item.repo, !SKIP_CLEANUP);
+    core.endGroup();
   }
 }
 

@@ -271,6 +271,113 @@ group:
       expect(result[0]?.files).toHaveLength(2);
     });
 
+    it('should process a repo once with all files when it appears in many groups', async () => {
+      const configYaml = `
+group:
+  - repos: |
+      org/repo-a
+      org/repo-b
+    files:
+      - a1.txt
+  - repos: |
+      org/repo-a
+    files:
+      - a2.txt
+  - repos: |
+      org/repo-a
+      org/repo-b
+    files:
+      - shared.txt
+`;
+      mockFileContents['.github/sync.yml'] = configYaml;
+
+      const { parseConfig } = await import('../src/config.js');
+      const result = await parseConfig();
+
+      // repo-a and repo-b are each processed once
+      expect(result).toHaveLength(2);
+
+      const repoA = result.find((r) => r.repo.name === 'repo-a');
+      const repoB = result.find((r) => r.repo.name === 'repo-b');
+
+      // repo-a appears in all three groups => 1 + 1 + 1 files combined
+      expect(repoA?.files.map((f) => f.source)).toEqual(['a1.txt', 'a2.txt', 'shared.txt']);
+      // repo-b appears in two groups => 1 + 1 files combined
+      expect(repoB?.files.map((f) => f.source)).toEqual(['a1.txt', 'shared.txt']);
+    });
+
+    it('should merge a repo that appears in both a group and a top-level key', async () => {
+      const configYaml = `
+user/repo:
+  - top-level.txt
+group:
+  - repos: |
+      user/repo
+    files:
+      - in-group.txt
+`;
+      mockFileContents['.github/sync.yml'] = configYaml;
+
+      const { parseConfig } = await import('../src/config.js');
+      const result = await parseConfig();
+
+      // The repo must be processed only once, with files from both sources
+      expect(result).toHaveLength(1);
+      expect(result[0]?.files.map((f) => f.source).sort()).toEqual(['in-group.txt', 'top-level.txt']);
+    });
+
+    it('should keep the same repo separate when branchSuffix differs', async () => {
+      const configYaml = `
+group:
+  - repos: |
+      user/repo
+    branchSuffix: alpha
+    files:
+      - alpha.txt
+  - repos: |
+      user/repo
+    branchSuffix: beta
+    files:
+      - beta.txt
+`;
+      mockFileContents['.github/sync.yml'] = configYaml;
+
+      const { parseConfig } = await import('../src/config.js');
+      const result = await parseConfig();
+
+      // Different branchSuffix targets different branches/PRs => not merged
+      expect(result).toHaveLength(2);
+      expect(result.map((r) => r.branchSuffix).sort()).toEqual(['alpha', 'beta']);
+    });
+
+    it('should merge reviewers when a repo appears in multiple groups', async () => {
+      const configYaml = `
+group:
+  - repos: |
+      user/repo
+    reviewers:
+      - alice
+      - bob
+    files:
+      - one.txt
+  - repos: |
+      user/repo
+    reviewers:
+      - bob
+      - carol
+    files:
+      - two.txt
+`;
+      mockFileContents['.github/sync.yml'] = configYaml;
+
+      const { parseConfig } = await import('../src/config.js');
+      const result = await parseConfig();
+
+      expect(result).toHaveLength(1);
+      // Reviewers are unioned and de-duplicated
+      expect(result[0]?.reviewers?.sort()).toEqual(['alice', 'bob', 'carol']);
+    });
+
     it('should parse custom host URL', async () => {
       const configYaml = `
 https://github.enterprise.com/org/repo:
