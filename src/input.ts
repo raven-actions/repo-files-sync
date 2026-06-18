@@ -1,7 +1,7 @@
 import * as core from '@actions/core';
 
-// Re-export native functions for direct use
-export { getInput, getMultilineInput } from '@actions/core';
+// Re-export native function for direct use
+export { getInput } from '@actions/core';
 
 /**
  * Get a boolean input with a default value.
@@ -26,17 +26,17 @@ export function getOptionalInput(key: string, defaultValue: string): string {
 
 /**
  * Get an array input (comma or newline separated).
- * Extends native getMultilineInput to also support comma separation.
+ * Builds on core.getMultilineInput (newline split + per-line trim) and
+ * additionally splits each line on commas.
  */
 export function getArrayInput(key: string): string[] | undefined {
-  const value = core.getInput(key);
-  if (value === '') {
-    return undefined;
-  }
-  return value
-    .split(/[,\n]/)
+  const items = core
+    .getMultilineInput(key)
+    .flatMap((line) => line.split(','))
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+
+  return items.length > 0 ? items : undefined;
 }
 
 /**

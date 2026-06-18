@@ -9,6 +9,12 @@ const mockInputs: Record<string, string> = {};
 
 vi.mock('@actions/core', () => ({
   getInput: vi.fn((key: string) => mockInputs[key] ?? ''),
+  getMultilineInput: vi.fn((key: string) =>
+    (mockInputs[key] ?? '')
+      .split('\n')
+      .filter((line: string) => line !== '')
+      .map((line: string) => line.trim())
+  ),
   debug: vi.fn(),
   info: vi.fn(),
   warning: vi.fn(),
