@@ -37,6 +37,7 @@ function initializeContext(): ConfigContext {
     GIT_USERNAME: getInput('GIT_USERNAME') || undefined,
     CONFIG_PATH: getOptionalInput('CONFIG_PATH', '.github/sync.yml'),
     INLINE_CONFIG: getOptionalInput('INLINE_CONFIG', ''),
+    REPOS: getArrayInput('REPOS'),
     IS_FINE_GRAINED: token.startsWith('github_pat_'),
     COMMIT_BODY: getOptionalInput('COMMIT_BODY', ''),
     COMMIT_PREFIX: getOptionalInput('COMMIT_PREFIX', '🔄'),
@@ -210,6 +211,55 @@ interface GroupConfig {
 type YamlConfig = Record<string, (string | RawFileConfig)[] | { group: GroupConfig | GroupConfig[] }>;
 
 /**
+ * Build the identifiers a repo can be matched by when filtering with REPOS.
+ * Supports `owner/name`, `owner/name@branch`, and the host-qualified forms.
+ */
+function repoFilterCandidates(repo: RepoInfo): string[] {
+  return [`${repo.user}/${repo.name}`, `${repo.user}/${repo.name}@${repo.branch}`, repo.fullName, repo.uniqueName].map((value) =>
+    value.toLowerCase()
+  );
+}
+
+/**
+ * Restrict the parsed repos to the ones requested via the REPOS input, keeping
+ * the original config order. This is purely a repository filter: the file
+ * configuration still comes from the existing config. Requested names that do
+ * not match any configured repo are ignored (no error), and an empty input
+ * disables the filter so every repo is processed.
+ */
+function filterRepos(repos: RepoConfig[]): RepoConfig[] {
+  const tokens = [...new Set((context.REPOS ?? []).map((token) => token.trim().toLowerCase()).filter((token) => token.length > 0))];
+
+  if (tokens.length === 0) {
+    return repos;
+  }
+
+  core.info(`Limiting sync to requested repo(s): ${tokens.join(', ')}`);
+
+  const matchedTokens = new Set<string>();
+  const filtered = repos.filter((item) => {
+    const candidates = repoFilterCandidates(item.repo);
+    const hits = tokens.filter((token) => candidates.includes(token));
+    hits.forEach((token) => matchedTokens.add(token));
+    return hits.length > 0;
+  });
+
+  // Surface requested names that matched nothing, but never fail the run.
+  const unmatched = tokens.filter((token) => !matchedTokens.has(token));
+  if (unmatched.length > 0) {
+    core.warning(`Requested repo(s) not found in the config (ignored): ${unmatched.join(', ')}`);
+  }
+
+  if (filtered.length === 0) {
+    core.warning('No repos matched the requested filter; nothing to sync.');
+  } else {
+    core.info(`Matched ${filtered.length} repo(s): ${filtered.map((item) => `${item.repo.user}/${item.repo.name}`).join(', ')}`);
+  }
+
+  return filtered;
+}
+
+/**
  * Parse the sync configuration file and return an array of RepoConfig objects
  */
 export async function parseConfig(): Promise<RepoConfig[]> {
@@ -277,7 +327,7 @@ export async function parseConfig(): Promise<RepoConfig[]> {
     }
   });
 
-  return Object.values(result);
+  return filterRepos(Object.values(result));
 }
 
 export default context;

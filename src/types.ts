@@ -60,6 +60,7 @@ export interface ConfigContext {
   GIT_USERNAME: string | undefined;
   CONFIG_PATH: string;
   INLINE_CONFIG: string;
+  REPOS: string[] | undefined;
   IS_FINE_GRAINED: boolean;
   COMMIT_BODY: string;
   COMMIT_PREFIX: string;
