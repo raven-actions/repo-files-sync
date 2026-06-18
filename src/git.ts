@@ -128,7 +128,7 @@ export default class Git {
     // and let the caller skip the repo instead.
     this.isEmptyRepo = await this.hasNoCommits();
     if (this.isEmptyRepo) {
-      core.warning(`${repo.fullName} has no commits on the default branch — skipping`);
+      core.warning(`${repo.fullName} has no commits on the default branch - skipping`);
       return;
     }
 

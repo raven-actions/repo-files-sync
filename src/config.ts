@@ -224,6 +224,34 @@ export async function parseConfig(): Promise<RepoConfig[]> {
 
   const result: Record<string, RepoConfig> = {};
 
+  // Merge a repo entry into the result so that a given target is only processed
+  // once with every related config combined. The identity is the repo's
+  // uniqueName (host/user/name@branch) plus the branchSuffix, because a
+  // different suffix intentionally targets a different branch/PR. The same key
+  // shape is used for both `group` and top-level entries so a repo that appears
+  // across multiple groups - or in a mix of groups and top-level keys - is
+  // always deduplicated (otherwise it would be cloned to the same working
+  // directory and pushed to the same branch twice).
+  const mergeRepo = (repo: RepoInfo, files: FileConfig[], branchSuffix: string, reviewers?: string[]): void => {
+    const resultKey = `${repo.uniqueName}|${branchSuffix}`;
+    const existing = result[resultKey];
+
+    if (existing !== undefined) {
+      existing.files.push(...files);
+
+      if (reviewers && reviewers.length > 0) {
+        existing.reviewers = [...new Set([...(existing.reviewers ?? []), ...reviewers])];
+      }
+      return;
+    }
+
+    const repoConfig: RepoConfig = { repo, files, branchSuffix };
+    if (reviewers && reviewers.length > 0) {
+      repoConfig.reviewers = [...reviewers];
+    }
+    result[resultKey] = repoConfig;
+  };
+
   Object.keys(configObject).forEach((key) => {
     if (key === 'group') {
       const rawObject = configObject[key] as unknown as GroupConfig | GroupConfig[];
@@ -241,34 +269,11 @@ export async function parseConfig(): Promise<RepoConfig[]> {
         const branchSuffix = group.branchSuffix || '';
 
         repos.forEach((name) => {
-          const files = parseFiles(group.files);
-          const repo = parseRepoName(name);
-          const resultKey = `${repo.uniqueName}|${branchSuffix}`;
-          const existing = result[resultKey];
-
-          if (existing !== undefined) {
-            existing.files.push(...files);
-            return;
-          }
-
-          const repoConfig: RepoConfig = { repo, files, branchSuffix };
-          if (group.reviewers) {
-            repoConfig.reviewers = group.reviewers;
-          }
-          result[resultKey] = repoConfig;
+          mergeRepo(parseRepoName(name), parseFiles(group.files), branchSuffix, group.reviewers);
         });
       });
     } else {
-      const files = parseFiles(configObject[key] as (string | RawFileConfig)[]);
-      const repo = parseRepoName(key);
-      const existing = result[repo.uniqueName];
-
-      if (existing !== undefined) {
-        existing.files.push(...files);
-        return;
-      }
-
-      result[repo.uniqueName] = { repo, files, branchSuffix: '' };
+      mergeRepo(parseRepoName(key), parseFiles(configObject[key] as (string | RawFileConfig)[]), '');
     }
   });
 
