@@ -809,7 +809,54 @@ describe('git.ts - closed PR reopen handling', () => {
     expect(gitAny.github.git.deleteRef).not.toHaveBeenCalled();
   });
 
-  it('createOrUpdatePr should reopen the closed PR with state open', async () => {
+  it('push reopens the closed PR before force-pushing its branch', async () => {
+    const git = new Git();
+    execGitMock.mockResolvedValue('main');
+    await git.initRepo(mockRepoInfo);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const gitAny = git as any;
+    gitAny.prBranch = 'sync/repo/main';
+    gitAny.existingPr = { number: 12, html_url: 'https://github.com/test/repo/pull/12', body: 'old' };
+    gitAny.reopenClosedPr = true;
+    gitAny.forceUpdateBranch = true;
+    gitAny.github.pulls.update.mockResolvedValue({
+      data: { number: 12, html_url: 'https://github.com/test/repo/pull/12', body: 'old' }
+    });
+
+    await git.push();
+
+    // Reopen happens before the force-push, while the branch still matches the PR
+    expect(gitAny.github.pulls.update).toHaveBeenCalledWith(expect.objectContaining({ pull_number: 12, state: 'open' }));
+    expect(gitAny.prWasReopened).toBe(true);
+    expect(gitAny.reopenClosedPr).toBe(false);
+    expect(gitAny.existingPr.number).toBe(12);
+  });
+
+  it('push drops the PR reference when GitHub refuses to reopen (branch was recreated)', async () => {
+    const git = new Git();
+    execGitMock.mockResolvedValue('main');
+    await git.initRepo(mockRepoInfo);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const gitAny = git as any;
+    gitAny.prBranch = 'sync/repo/main';
+    gitAny.existingPr = { number: 12, html_url: 'https://github.com/test/repo/pull/12', body: 'old' };
+    gitAny.reopenClosedPr = true;
+    gitAny.forceUpdateBranch = true;
+    gitAny.github.pulls.update.mockRejectedValue(
+      new Error('state cannot be changed. The repo-sync/default branch was force-pushed or recreated.')
+    );
+
+    await git.push();
+
+    // A new PR will be created later (createOrUpdatePr) instead of reopening
+    expect(gitAny.existingPr).toBeUndefined();
+    expect(gitAny.prWasReopened).toBe(false);
+    expect(gitAny.reopenClosedPr).toBe(false);
+  });
+
+  it('createOrUpdatePr reports the reopened action and does not change PR state', async () => {
     const git = new Git();
     execGitMock.mockResolvedValue('main');
     await git.initRepo(mockRepoInfo);
@@ -819,23 +866,22 @@ describe('git.ts - closed PR reopen handling', () => {
     gitAny.prBranch = 'sync/repo/main';
     gitAny.baseBranch = 'main';
     gitAny.existingPr = { number: 12, html_url: 'https://github.com/test/repo/pull/12', body: 'old' };
-    gitAny.reopenClosedPr = true;
+    gitAny.prWasReopened = true;
     gitAny.github.pulls.update.mockResolvedValue({
       data: { number: 12, html_url: 'https://github.com/test/repo/pull/12', body: 'new' }
     });
 
     const result = await git.createOrUpdatePr('');
 
-    expect(gitAny.github.pulls.update).toHaveBeenCalledWith(
-      expect.objectContaining({ pull_number: 12, state: 'open' })
-    );
+    // State was already reopened in push(); this update must not touch state
+    expect(gitAny.github.pulls.update.mock.calls[0][0]).not.toHaveProperty('state');
     expect(gitAny.github.pulls.create).not.toHaveBeenCalled();
     expect(result.number).toBe(12);
     expect(result.action).toBe('reopened');
-    expect(gitAny.reopenClosedPr).toBe(false);
+    expect(gitAny.prWasReopened).toBe(false);
   });
 
-  it('createOrUpdatePr should fall back to creating a PR when reopening fails', async () => {
+  it('createOrUpdatePr reports the updated action for an existing open PR', async () => {
     const git = new Git();
     execGitMock.mockResolvedValue('main');
     await git.initRepo(mockRepoInfo);
@@ -844,9 +890,29 @@ describe('git.ts - closed PR reopen handling', () => {
     const gitAny = git as any;
     gitAny.prBranch = 'sync/repo/main';
     gitAny.baseBranch = 'main';
-    gitAny.existingPr = { number: 12, html_url: 'https://github.com/test/repo/pull/12', body: 'old' };
-    gitAny.reopenClosedPr = true;
-    gitAny.github.pulls.update.mockRejectedValue(new Error('cannot reopen'));
+    gitAny.existingPr = { number: 7, html_url: 'https://github.com/test/repo/pull/7', body: 'old' };
+    gitAny.prWasReopened = false;
+    gitAny.github.pulls.update.mockResolvedValue({
+      data: { number: 7, html_url: 'https://github.com/test/repo/pull/7', body: 'new' }
+    });
+
+    const result = await git.createOrUpdatePr('');
+
+    expect(gitAny.github.pulls.create).not.toHaveBeenCalled();
+    expect(result.number).toBe(7);
+    expect(result.action).toBe('updated');
+  });
+
+  it('createOrUpdatePr creates a new PR when there is none to reuse', async () => {
+    const git = new Git();
+    execGitMock.mockResolvedValue('main');
+    await git.initRepo(mockRepoInfo);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const gitAny = git as any;
+    gitAny.prBranch = 'sync/repo/main';
+    gitAny.baseBranch = 'main';
+    gitAny.existingPr = undefined;
     gitAny.github.pulls.create.mockResolvedValue({
       data: { number: 13, html_url: 'https://github.com/test/repo/pull/13', body: 'new' }
     });
@@ -856,6 +922,5 @@ describe('git.ts - closed PR reopen handling', () => {
     expect(gitAny.github.pulls.create).toHaveBeenCalled();
     expect(result.number).toBe(13);
     expect(result.action).toBe('created');
-    expect(gitAny.reopenClosedPr).toBe(false);
   });
 });
