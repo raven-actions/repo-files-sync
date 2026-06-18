@@ -696,3 +696,164 @@ describe('git.ts - edge cases', () => {
     });
   });
 });
+
+describe('git.ts - closed PR reopen handling', () => {
+  const mockRepoInfo: RepoInfo = {
+    url: 'https://github.com/test/repo',
+    fullName: 'github.com/test/repo',
+    uniqueName: 'github.com/test/repo@main',
+    host: 'github.com',
+    user: 'test',
+    name: 'repo',
+    branch: 'main'
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('getClosedPr should return the most recent unmerged closed PR', async () => {
+    const git = new Git();
+    execGitMock.mockResolvedValue('main');
+    await git.initRepo(mockRepoInfo);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const gitAny = git as any;
+    gitAny.github.pulls.list.mockResolvedValue({
+      data: [
+        { number: 10, html_url: 'https://github.com/test/repo/pull/10', body: 'older', merged_at: null },
+        { number: 12, html_url: 'https://github.com/test/repo/pull/12', body: 'newer', merged_at: null }
+      ]
+    });
+
+    const closed = await git.getClosedPr();
+
+    expect(closed).toEqual({
+      number: 12,
+      html_url: 'https://github.com/test/repo/pull/12',
+      body: 'newer'
+    });
+  });
+
+  it('getClosedPr should ignore merged PRs', async () => {
+    const git = new Git();
+    execGitMock.mockResolvedValue('main');
+    await git.initRepo(mockRepoInfo);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const gitAny = git as any;
+    gitAny.github.pulls.list.mockResolvedValue({
+      data: [{ number: 10, html_url: 'https://github.com/test/repo/pull/10', body: 'm', merged_at: '2026-01-01T00:00:00Z' }]
+    });
+
+    expect(await git.getClosedPr()).toBeUndefined();
+  });
+
+  it('createPrBranch should rebuild the branch and flag reopen when a closed PR exists', async () => {
+    const git = new Git();
+    execGitMock.mockResolvedValue('main');
+    await git.initRepo(mockRepoInfo);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const gitAny = git as any;
+    // Remote branch exists (rev-parse --verify succeeds)
+    execGitMock.mockResolvedValue('abc123');
+    // No open PR, but a stale closed PR exists for the branch
+    gitAny.github.pulls.list.mockImplementation(({ state }: { state: string }) =>
+      state === 'open'
+        ? Promise.resolve({ data: [] })
+        : Promise.resolve({ data: [{ number: 12, html_url: 'https://github.com/test/repo/pull/12', body: 'old', merged_at: null }] })
+    );
+
+    await git.createPrBranch();
+
+    expect(gitAny.existingPr).toEqual({
+      number: 12,
+      html_url: 'https://github.com/test/repo/pull/12',
+      body: 'old'
+    });
+    expect(gitAny.reopenClosedPr).toBe(true);
+    expect(gitAny.forceUpdateBranch).toBe(true);
+    // Branch is rebuilt from the base tip with a force-create switch (-C)
+    expect(execGitMock).toHaveBeenCalledWith(['switch', '-C', expect.stringContaining('main')], expect.any(String));
+    // The remote branch must NOT be deleted anymore
+    expect(gitAny.github.git.deleteRef).not.toHaveBeenCalled();
+  });
+
+  it('createPrBranch should NOT take the reopen path when an open PR exists (rebase wins)', async () => {
+    const git = new Git();
+    execGitMock.mockResolvedValue('main');
+    await git.initRepo(mockRepoInfo);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const gitAny = git as any;
+    // Remote branch exists
+    execGitMock.mockResolvedValue('abc123');
+    // A live open PR AND stale closed PRs both exist for the same branch
+    gitAny.github.pulls.list.mockImplementation(({ state }: { state: string }) =>
+      state === 'open'
+        ? Promise.resolve({ data: [{ number: 99, html_url: 'https://github.com/test/repo/pull/99', body: 'live' }] })
+        : Promise.resolve({ data: [{ number: 12, html_url: 'https://github.com/test/repo/pull/12', body: 'old', merged_at: null }] })
+    );
+
+    await git.createPrBranch();
+
+    // The open PR is reused, not the closed one
+    expect(gitAny.existingPr).toEqual({
+      number: 99,
+      html_url: 'https://github.com/test/repo/pull/99',
+      body: 'live'
+    });
+    expect(gitAny.reopenClosedPr).toBe(false);
+    // The remote branch must never be deleted for a live PR
+    expect(gitAny.github.git.deleteRef).not.toHaveBeenCalled();
+  });
+
+  it('createOrUpdatePr should reopen the closed PR with state open', async () => {
+    const git = new Git();
+    execGitMock.mockResolvedValue('main');
+    await git.initRepo(mockRepoInfo);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const gitAny = git as any;
+    gitAny.prBranch = 'sync/repo/main';
+    gitAny.baseBranch = 'main';
+    gitAny.existingPr = { number: 12, html_url: 'https://github.com/test/repo/pull/12', body: 'old' };
+    gitAny.reopenClosedPr = true;
+    gitAny.github.pulls.update.mockResolvedValue({
+      data: { number: 12, html_url: 'https://github.com/test/repo/pull/12', body: 'new' }
+    });
+
+    const result = await git.createOrUpdatePr('');
+
+    expect(gitAny.github.pulls.update).toHaveBeenCalledWith(
+      expect.objectContaining({ pull_number: 12, state: 'open' })
+    );
+    expect(gitAny.github.pulls.create).not.toHaveBeenCalled();
+    expect(result.number).toBe(12);
+    expect(gitAny.reopenClosedPr).toBe(false);
+  });
+
+  it('createOrUpdatePr should fall back to creating a PR when reopening fails', async () => {
+    const git = new Git();
+    execGitMock.mockResolvedValue('main');
+    await git.initRepo(mockRepoInfo);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const gitAny = git as any;
+    gitAny.prBranch = 'sync/repo/main';
+    gitAny.baseBranch = 'main';
+    gitAny.existingPr = { number: 12, html_url: 'https://github.com/test/repo/pull/12', body: 'old' };
+    gitAny.reopenClosedPr = true;
+    gitAny.github.pulls.update.mockRejectedValue(new Error('cannot reopen'));
+    gitAny.github.pulls.create.mockResolvedValue({
+      data: { number: 13, html_url: 'https://github.com/test/repo/pull/13', body: 'new' }
+    });
+
+    const result = await git.createOrUpdatePr('');
+
+    expect(gitAny.github.pulls.create).toHaveBeenCalled();
+    expect(result.number).toBe(13);
+    expect(gitAny.reopenClosedPr).toBe(false);
+  });
+});

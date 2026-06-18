@@ -58,6 +58,7 @@ export default class Git {
   private lastCommitChanges: GitDiffDict | undefined;
   private remoteBranchHead: string | undefined;
   private forceUpdateBranch = false;
+  private reopenClosedPr = false;
   public isEmptyRepo = false;
   public workingDir!: string;
 
@@ -106,6 +107,7 @@ export default class Git {
     this.prBranchSuffix = undefined;
     this.remoteBranchHead = undefined;
     this.forceUpdateBranch = false;
+    this.reopenClosedPr = false;
     this.lastCommitChanges = undefined;
     this.isEmptyRepo = false;
 
@@ -219,16 +221,28 @@ export default class Git {
       this.remoteBranchHead = undefined;
     }
 
-    // If the remote branch exists but has a closed (unmerged) PR, delete it and start fresh
-    const branchHasClosedPr = this.remoteBranchHead ? await this.hasClosedPr() : false;
+    // Inspect the PR state for this branch. A long-lived sync branch (e.g.
+    // `repo-sync/default`) accumulates many closed PRs from previous syncs, so a
+    // closed PR almost always exists. Only treat the branch as "closed" when
+    // there is NO currently-open PR; otherwise the open PR must be reused/rebased.
+    // Checking the open PR first prevents the closed-PR path from deleting or
+    // rewriting the branch of a live PR (deleting the branch auto-closes the open
+    // PR, which is why a rebase-enabled run could end up closing the PR instead).
+    const openPr = this.remoteBranchHead ? await this.findExistingPr() : undefined;
+    const closedPr = this.remoteBranchHead && !openPr ? await this.getClosedPr() : undefined;
 
-    if (this.remoteBranchHead && branchHasClosedPr) {
-      core.info(`Found closed PR for branch ${newBranch}, deleting remote branch to start fresh`);
-      await this.deleteRemoteBranch(newBranch);
-      this.remoteBranchHead = undefined;
+    if (closedPr) {
+      // The previous sync PR was closed and no PR is currently open. Rebuild the
+      // branch from the base tip and reopen that PR instead of deleting the
+      // branch (which orphaned it) or creating a duplicate.
+      core.info(`Found closed PR #${closedPr.number} for branch ${newBranch} and no open PR, rebuilding the branch and reopening the PR`);
+      this.existingPr = closedPr;
+      this.reopenClosedPr = true;
 
-      // Create a new local branch from the base branch
-      await execGit(['switch', '-c', newBranch], this.workingDir);
+      // Rebuild the PR branch from the base tip; push() force-updates it so the
+      // reopened PR always reflects a fresh sync on top of the latest base.
+      await execGit(['switch', '-C', newBranch], this.workingDir);
+      this.forceUpdateBranch = true;
     } else if (REBASE && this.remoteBranchHead && (await this.isBranchBehindBase(newBranch))) {
       // REBASE: keep an existing sync PR up to date with the base branch
       // (Dependabot-style). The working tree is a fresh clone of the base branch
@@ -272,6 +286,8 @@ export default class Git {
     this.existingPr = undefined;
     this.prBranch = undefined;
     this.lastCommitChanges = undefined;
+    this.reopenClosedPr = false;
+    this.forceUpdateBranch = false;
   }
 
   isOneCommitPush(): boolean {
@@ -555,6 +571,15 @@ export default class Git {
   }
 
   async hasClosedPr(): Promise<boolean> {
+    return (await this.getClosedPr()) !== undefined;
+  }
+
+  /**
+   * Returns the most recent closed-but-unmerged PR for the current PR branch, or
+   * undefined when none exists. Used to reopen a previously closed sync PR
+   * instead of leaving it closed with an updated branch.
+   */
+  async getClosedPr(): Promise<PullRequestInfo | undefined> {
     const { data } = await this.github.pulls.list({
       owner: this.repo.user,
       repo: this.repo.name,
@@ -562,8 +587,18 @@ export default class Git {
       head: `${FORK ? FORK : this.repo.user}:${this.prBranch}`
     });
 
-    // Only consider closed PRs that were NOT merged
-    return data.some((pr) => !pr.merged_at);
+    // Only consider closed PRs that were NOT merged; pick the most recent one.
+    const closed = data.filter((pr) => !pr.merged_at).sort((a, b) => b.number - a.number)[0];
+
+    if (!closed) {
+      return undefined;
+    }
+
+    return {
+      number: closed.number,
+      html_url: closed.html_url,
+      body: closed.body
+    };
   }
 
   /**
@@ -689,22 +724,36 @@ export default class Git {
     `;
 
     if (this.existingPr) {
-      core.info('Overwriting existing PR');
+      core.info(this.reopenClosedPr ? `Reopening and updating PR #${this.existingPr.number}` : 'Overwriting existing PR');
 
-      const { data } = await this.github.pulls.update({
-        owner: this.repo.user,
-        repo: this.repo.name,
-        title: resolvedTitle,
-        pull_number: this.existingPr.number,
-        body
-      });
+      try {
+        const { data } = await this.github.pulls.update({
+          owner: this.repo.user,
+          repo: this.repo.name,
+          title: resolvedTitle,
+          pull_number: this.existingPr.number,
+          body,
+          ...(this.reopenClosedPr ? { state: 'open' as const } : {})
+        });
 
-      this.existingPr = {
-        number: data.number,
-        html_url: data.html_url,
-        body: data.body
-      };
-      return this.existingPr;
+        this.existingPr = {
+          number: data.number,
+          html_url: data.html_url,
+          body: data.body
+        };
+        this.reopenClosedPr = false;
+        return this.existingPr;
+      } catch (error) {
+        if (!this.reopenClosedPr) {
+          throw error;
+        }
+
+        // The closed PR could not be reopened (e.g. GitHub refused because the
+        // head branch had been detached). Fall back to creating a brand-new PR.
+        core.warning(`Could not reopen PR #${this.existingPr.number}, creating a new PR instead: ${String(error)}`);
+        this.existingPr = undefined;
+        this.reopenClosedPr = false;
+      }
     }
 
     core.info('Creating new PR');
