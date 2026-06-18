@@ -67,6 +67,7 @@ export default class Git {
   private remoteBranchHead: string | undefined;
   private forceUpdateBranch = false;
   private reopenClosedPr = false;
+  private prWasReopened = false;
   public isEmptyRepo = false;
   public workingDir!: string;
 
@@ -116,6 +117,7 @@ export default class Git {
     this.remoteBranchHead = undefined;
     this.forceUpdateBranch = false;
     this.reopenClosedPr = false;
+    this.prWasReopened = false;
     this.lastCommitChanges = undefined;
     this.isEmptyRepo = false;
 
@@ -295,6 +297,7 @@ export default class Git {
     this.prBranch = undefined;
     this.lastCommitChanges = undefined;
     this.reopenClosedPr = false;
+    this.prWasReopened = false;
     this.forceUpdateBranch = false;
   }
 
@@ -525,7 +528,54 @@ export default class Git {
     return execGit(['status'], this.workingDir);
   }
 
+  /**
+   * Reopen a closed sync PR before its branch is force-pushed/recreated.
+   *
+   * GitHub refuses to change a closed PR back to "open" once its head branch has
+   * been force-pushed or recreated ("state cannot be changed. The <branch>
+   * branch was force-pushed or recreated."). The closed-PR flow rebuilds and
+   * force-updates the branch, so the reopen must happen first, while the branch
+   * still matches the closed PR. If GitHub still refuses (e.g. the branch was
+   * already recreated in a previous run), drop the reference so a brand-new PR
+   * is created after the push instead.
+   */
+  private async maybeReopenClosedPr(): Promise<void> {
+    if (!this.reopenClosedPr || !this.existingPr) {
+      return;
+    }
+
+    this.reopenClosedPr = false;
+    const prNumber = this.existingPr.number;
+
+    try {
+      const { data } = await this.github.pulls.update({
+        owner: this.repo.user,
+        repo: this.repo.name,
+        pull_number: prNumber,
+        state: 'open'
+      });
+
+      this.existingPr = {
+        number: data.number,
+        html_url: data.html_url,
+        body: data.body
+      };
+      this.prWasReopened = true;
+      core.info(`Reopened PR #${prNumber} before updating its branch`);
+    } catch (error) {
+      // Expected when the branch was force-pushed/recreated since the PR closed;
+      // a fresh PR will be opened on the (re)pushed branch instead.
+      core.info(`PR #${prNumber} can't be reopened (${(error as Error).message}); a new PR will be created instead`);
+      this.existingPr = undefined;
+    }
+  }
+
   async push(): Promise<string | void> {
+    // Reopen a closed PR *before* its branch is force-pushed/recreated below.
+    // GitHub rejects changing a closed PR back to "open" once the head branch
+    // has been force-pushed or recreated, so this must happen first.
+    await this.maybeReopenClosedPr();
+
     const targetBranch = SKIP_PR ? this.baseBranch : this.prBranch;
 
     // In REBASE mode the PR branch is intentionally rewritten onto the latest
@@ -732,37 +782,24 @@ export default class Git {
     `;
 
     if (this.existingPr) {
-      core.info(this.reopenClosedPr ? `Reopening and updating PR #${this.existingPr.number}` : 'Overwriting existing PR');
+      core.info(this.prWasReopened ? `Updating reopened PR #${this.existingPr.number}` : 'Overwriting existing PR');
 
-      try {
-        const { data } = await this.github.pulls.update({
-          owner: this.repo.user,
-          repo: this.repo.name,
-          title: resolvedTitle,
-          pull_number: this.existingPr.number,
-          body,
-          ...(this.reopenClosedPr ? { state: 'open' as const } : {})
-        });
+      const { data } = await this.github.pulls.update({
+        owner: this.repo.user,
+        repo: this.repo.name,
+        title: resolvedTitle,
+        pull_number: this.existingPr.number,
+        body
+      });
 
-        const action: PrAction = this.reopenClosedPr ? 'reopened' : 'updated';
-        this.existingPr = {
-          number: data.number,
-          html_url: data.html_url,
-          body: data.body
-        };
-        this.reopenClosedPr = false;
-        return { ...this.existingPr, action };
-      } catch (error) {
-        if (!this.reopenClosedPr) {
-          throw error;
-        }
-
-        // The closed PR could not be reopened (e.g. GitHub refused because the
-        // head branch had been detached). Fall back to creating a brand-new PR.
-        core.warning(`Could not reopen PR #${this.existingPr.number}, creating a new PR instead: ${String(error)}`);
-        this.existingPr = undefined;
-        this.reopenClosedPr = false;
-      }
+      const action: PrAction = this.prWasReopened ? 'reopened' : 'updated';
+      this.existingPr = {
+        number: data.number,
+        html_url: data.html_url,
+        body: data.body
+      };
+      this.prWasReopened = false;
+      return { ...this.existingPr, action };
     }
 
     core.info('Creating new PR');
