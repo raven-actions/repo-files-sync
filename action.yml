@@ -23,6 +23,16 @@ inputs:
       Inline YAML configuration (alternative to CONFIG_PATH).
       When set, this is used instead of reading CONFIG_PATH.
     required: false
+  REPOS:
+    description: |
+      Limit the sync to specific target repositories.
+      Comma-separated list of `owner/name` (optionally `@branch`) that must
+      match repositories already defined in the sync config. This only filters
+      which repositories are processed (keeping their order from the config);
+      the file configuration still comes from the existing config.
+      Names that do not match any configured repository are ignored (no error).
+      Leave empty to sync every repository from the config.
+    required: false
   PR_LABELS:
     description: |
       Labels to add to the pull request.

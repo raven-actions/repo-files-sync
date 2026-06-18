@@ -444,6 +444,107 @@ user/file-repo:
     });
   });
 
+  describe('with REPOS filter', () => {
+    const inlineConfig = `
+group:
+  - repos: |
+      org/alpha
+      org/beta
+      org/gamma
+    files:
+      - shared.txt
+`;
+
+    it('should limit processing to a single requested repo', async () => {
+      mockInputs['INLINE_CONFIG'] = inlineConfig;
+      mockInputs['REPOS'] = 'org/beta';
+
+      const { parseConfig } = await import('../src/config.js');
+      const result = await parseConfig();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.repo.name).toBe('beta');
+    });
+
+    it('should accept a comma-separated list and keep the config order', async () => {
+      mockInputs['INLINE_CONFIG'] = inlineConfig;
+      // Requested out of config order; output must still follow config order
+      mockInputs['REPOS'] = 'org/gamma, org/alpha';
+
+      const { parseConfig } = await import('../src/config.js');
+      const result = await parseConfig();
+
+      expect(result.map((r) => r.repo.name)).toEqual(['alpha', 'gamma']);
+    });
+
+    it('should ignore requested repos that are not in the config (no error)', async () => {
+      mockInputs['INLINE_CONFIG'] = inlineConfig;
+      mockInputs['REPOS'] = 'org/alpha, org/does-not-exist';
+
+      const { parseConfig } = await import('../src/config.js');
+      const result = await parseConfig();
+
+      expect(result.map((r) => r.repo.name)).toEqual(['alpha']);
+    });
+
+    it('should return nothing when no requested repo matches', async () => {
+      mockInputs['INLINE_CONFIG'] = inlineConfig;
+      mockInputs['REPOS'] = 'org/nope';
+
+      const { parseConfig } = await import('../src/config.js');
+      const result = await parseConfig();
+
+      expect(result).toHaveLength(0);
+    });
+
+    it('should not filter when REPOS is empty', async () => {
+      mockInputs['INLINE_CONFIG'] = inlineConfig;
+      mockInputs['REPOS'] = '';
+
+      const { parseConfig } = await import('../src/config.js');
+      const result = await parseConfig();
+
+      expect(result).toHaveLength(3);
+    });
+
+    it('should match owner/name regardless of branch', async () => {
+      mockInputs['INLINE_CONFIG'] = `
+group:
+  - repos: |
+      org/alpha@edge
+      org/beta
+    files:
+      - shared.txt
+`;
+      mockInputs['REPOS'] = 'org/alpha';
+
+      const { parseConfig } = await import('../src/config.js');
+      const result = await parseConfig();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.repo.name).toBe('alpha');
+      expect(result[0]?.repo.branch).toBe('edge');
+    });
+
+    it('should match a branch-specific request only against that branch', async () => {
+      mockInputs['INLINE_CONFIG'] = `
+group:
+  - repos: |
+      org/alpha@edge
+      org/alpha@main
+    files:
+      - shared.txt
+`;
+      mockInputs['REPOS'] = 'org/alpha@main';
+
+      const { parseConfig } = await import('../src/config.js');
+      const result = await parseConfig();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.repo.branch).toBe('main');
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle repo with dots in name', async () => {
       const configYaml = `
