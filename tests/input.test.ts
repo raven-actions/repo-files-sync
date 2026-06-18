@@ -26,6 +26,14 @@ vi.mock('@actions/core', () => ({
 describe('input.ts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // getArrayInput now builds on core.getMultilineInput; mirror its real
+    // behaviour (newline split + per-line trim) on top of the mocked getInput.
+    vi.mocked(core.getMultilineInput).mockImplementation((name: string) =>
+      String(vi.mocked(core.getInput)(name) ?? '')
+        .split('\n')
+        .filter((line) => line !== '')
+        .map((line) => line.trim())
+    );
   });
 
   afterEach(() => {

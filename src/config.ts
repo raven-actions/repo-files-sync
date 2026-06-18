@@ -3,7 +3,7 @@ import * as yaml from 'js-yaml';
 import fs from 'fs-extra';
 
 import { getInput, getBooleanInput, getArrayInput, getOptionalInput, getDisableableInput, getDisableableArrayInput } from './input.js';
-import type { ConfigContext, RepoInfo, FileConfig, RepoConfig } from './types.js';
+import type { ConfigContext, RepoInfo, FileConfig, RepoConfig, RawFileConfig, GroupConfig } from './types.js';
 
 // Default values
 const REPLACE_DEFAULT = true;
@@ -153,19 +153,6 @@ function parsePatterns(text: string | undefined, src: string): string[] | undefi
 }
 
 /**
- * Raw file configuration from YAML
- */
-interface RawFileConfig {
-  source?: string;
-  dest?: string;
-  template?: boolean | Record<string, unknown>;
-  replace?: boolean;
-  deleteOrphaned?: boolean;
-  exclude?: string;
-  include?: string;
-}
-
-/**
  * Parse file configurations from YAML
  */
 function parseFiles(files: (string | RawFileConfig)[]): FileConfig[] {
@@ -193,16 +180,6 @@ function parseFiles(files: (string | RawFileConfig)[]): FileConfig[] {
       return undefined;
     })
     .filter((file): file is FileConfig => file !== undefined);
-}
-
-/**
- * Group configuration from YAML
- */
-interface GroupConfig {
-  repos: string | string[];
-  files: (string | RawFileConfig)[];
-  branchSuffix?: string;
-  reviewers?: string[];
 }
 
 /**

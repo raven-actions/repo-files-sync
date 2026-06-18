@@ -26,6 +26,61 @@ export interface RepoConfig {
   reviewers?: string[];
 }
 
+/**
+ * Raw, un-normalized file entry exactly as written in the sync YAML config.
+ * These keys are the single source of truth for the file-level options the
+ * parser accepts. `FILE_CONFIG_KEYS` is derived from them and asserted against
+ * `sync.schema.json` by `tests/schema.test.ts`, so the schema can never silently
+ * drift from what the action actually accepts.
+ */
+export interface RawFileConfig {
+  source?: string;
+  dest?: string;
+  template?: boolean | Record<string, unknown>;
+  replace?: boolean;
+  deleteOrphaned?: boolean;
+  exclude?: string;
+  include?: string;
+}
+
+/**
+ * Group entry exactly as written in the sync YAML config.
+ */
+export interface GroupConfig {
+  repos: string | string[];
+  files: (string | RawFileConfig)[];
+  branchSuffix?: string;
+  reviewers?: string[];
+}
+
+// Typing these maps as `Record<keyof X, true>` forces them to enumerate EXACTLY
+// the interface keys: adding, renaming, or removing a field on the interface
+// above is a TypeScript error here until the map is updated — which in turn
+// updates the exported key list and makes the schema conformance test fail until
+// `sync.schema.json` is updated too.
+const FILE_CONFIG_KEY_MAP: Record<keyof RawFileConfig, true> = {
+  source: true,
+  dest: true,
+  template: true,
+  replace: true,
+  deleteOrphaned: true,
+  exclude: true,
+  include: true
+};
+
+const GROUP_KEY_MAP: Record<keyof GroupConfig, true> = {
+  repos: true,
+  files: true,
+  branchSuffix: true,
+  reviewers: true
+};
+
+/** File-level option keys the parser accepts (source of truth for the schema). */
+export const FILE_CONFIG_KEYS = Object.keys(FILE_CONFIG_KEY_MAP) as (keyof RawFileConfig)[];
+
+/** Group-level option keys the parser accepts (source of truth for the schema). */
+export const GROUP_KEYS = Object.keys(GROUP_KEY_MAP) as (keyof GroupConfig)[];
+
 // Git-related types
 export interface TreeDiffEntry {
   newMode: string;

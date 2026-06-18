@@ -18,6 +18,12 @@ vi.mock('@actions/core', () => ({
     if (value === 'false') return false;
     throw new Error(`Input does not meet YAML 1.2 "Core Schema" specification: ${key}`);
   }),
+  getMultilineInput: vi.fn((key: string) =>
+    (mockInputs[key] ?? '')
+      .split('\n')
+      .filter((line: string) => line !== '')
+      .map((line: string) => line.trim())
+  ),
   debug: vi.fn(),
   info: vi.fn(),
   warning: vi.fn(),
