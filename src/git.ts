@@ -16,6 +16,14 @@ interface PullRequestInfo {
   body: string | null;
 }
 
+// The concrete action taken on the pull request, so callers can report exactly
+// what happened instead of a generic "created/updated".
+type PrAction = 'created' | 'updated' | 'reopened';
+
+interface PullRequestResult extends PullRequestInfo {
+  action: PrAction;
+}
+
 // Git tree entry type for GitHub API
 type GitTreeMode = '100644' | '100755' | '040000' | '160000' | '120000';
 
@@ -702,7 +710,7 @@ export default class Git {
     `;
   }
 
-  async createOrUpdatePr(changedFiles: string, title?: string): Promise<PullRequestInfo> {
+  async createOrUpdatePr(changedFiles: string, title?: string): Promise<PullRequestResult> {
     const branchSuffix = this.prBranchSuffix ? ` (${this.prBranchSuffix})` : '';
     const resolvedTitle = title ?? `${COMMIT_PREFIX} synced file(s) with ${GITHUB_REPOSITORY}${branchSuffix}`;
 
@@ -736,13 +744,14 @@ export default class Git {
           ...(this.reopenClosedPr ? { state: 'open' as const } : {})
         });
 
+        const action: PrAction = this.reopenClosedPr ? 'reopened' : 'updated';
         this.existingPr = {
           number: data.number,
           html_url: data.html_url,
           body: data.body
         };
         this.reopenClosedPr = false;
-        return this.existingPr;
+        return { ...this.existingPr, action };
       } catch (error) {
         if (!this.reopenClosedPr) {
           throw error;
@@ -772,7 +781,7 @@ export default class Git {
       html_url: data.html_url,
       body: data.body
     };
-    return this.existingPr;
+    return { ...this.existingPr, action: 'created' };
   }
 
   async addPrLabels(labels: string[]): Promise<void> {

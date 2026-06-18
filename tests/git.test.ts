@@ -831,6 +831,7 @@ describe('git.ts - closed PR reopen handling', () => {
     );
     expect(gitAny.github.pulls.create).not.toHaveBeenCalled();
     expect(result.number).toBe(12);
+    expect(result.action).toBe('reopened');
     expect(gitAny.reopenClosedPr).toBe(false);
   });
 
@@ -854,6 +855,7 @@ describe('git.ts - closed PR reopen handling', () => {
 
     expect(gitAny.github.pulls.create).toHaveBeenCalled();
     expect(result.number).toBe(13);
+    expect(result.action).toBe('created');
     expect(gitAny.reopenClosedPr).toBe(false);
   });
 });
