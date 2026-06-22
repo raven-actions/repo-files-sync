@@ -1,8 +1,0 @@
----
-allowBuilds:
-  esbuild: true
-
-# Delay adopting just-published versions to avoid pulling in broken or yanked
-# releases during install/update (including `pnpm up --latest`).
-# Value is in minutes; 4320 = 3 days.
-minimumReleaseAge: 4320
