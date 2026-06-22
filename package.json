@@ -24,7 +24,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.9.3",
     "@types/nunjucks": "^3.2.6",
-    "@vitest/coverage-v8": "^4.1.8",
+    "@vitest/coverage-v8": "^4.1.9",
     "ajv": "^8.20.0",
     "esbuild": "^0.28.1",
     "eslint": "^10.5.0",
@@ -32,10 +32,10 @@
     "globals": "^17.6.0",
     "prettier": "^3.8.4",
     "prettier-plugin-multiline-arrays": "^4.1.9",
-    "syncpack": "^15.3.1",
+    "syncpack": "^15.3.2",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.61.0",
-    "vitest": "^4.1.8"
+    "typescript-eslint": "^8.61.1",
+    "vitest": "^4.1.9"
   },
   "files": [
     "dist/*",
