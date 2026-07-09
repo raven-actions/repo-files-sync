@@ -48,7 +48,9 @@
     "fileConfigObject": {
       "type": "object",
       "description": "Detailed file synchronization configuration",
-      "required": ["source"],
+      "required": [
+        "source"
+      ],
       "additionalProperties": false,
       "properties": {
         "source": {
@@ -176,7 +178,9 @@
     "groupWrapper": {
       "type": "object",
       "description": "Deprecated wrapper definition retained for schema compatibility",
-      "required": ["group"],
+      "required": [
+        "group"
+      ],
       "additionalProperties": false,
       "properties": {
         "group": {
@@ -270,15 +274,21 @@
             "owner/repo1",
             "owner/repo2"
           ],
-          "files": ["LICENSE"],
+          "files": [
+            "LICENSE"
+          ],
           "reviewers": [
             "reviewer1",
             "reviewer2"
           ]
         },
         {
-          "repos": ["owner/repo3"],
-          "files": [".gitignore"],
+          "repos": [
+            "owner/repo3"
+          ],
+          "files": [
+            ".gitignore"
+          ],
           "branchSuffix": "gitignore-update"
         }
       ]
