@@ -757,7 +757,31 @@ describe('helpers.ts - copy and write functions', () => {
         await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
 
         expect(await fs.pathExists(path.join(destSubDir, 'keep.txt'))).toBe(true);
-        // Note: fs.copy filter works on full paths, so this tests the path extraction logic
+        expect(await fs.pathExists(path.join(destSubDir, 'subdir', 'file1.txt'))).toBe(false);
+        expect(await fs.pathExists(path.join(destSubDir, 'subdir', 'file2.txt'))).toBe(false);
+      });
+
+      it.skipIf(process.platform === 'win32')('should preserve symbolic links in filtered directory copies', async () => {
+        const srcSubDir = path.join(srcDir, 'symlink-source');
+        const destSubDir = path.join(destDir, 'symlink-dest');
+
+        await fs.ensureDir(srcSubDir);
+        await fs.writeFile(path.join(srcSubDir, 'target.txt'), 'Target');
+        await fs.symlink('target.txt', path.join(srcSubDir, 'link.txt'));
+
+        const fileConfig: FileConfig = {
+          source: srcSubDir,
+          dest: destSubDir,
+          template: false,
+          replace: true,
+          deleteOrphaned: false,
+          exclude: ['*.tmp']
+        };
+
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+
+        expect((await fs.lstat(path.join(destSubDir, 'link.txt'))).isSymbolicLink()).toBe(true);
+        expect(await fs.readlink(path.join(destSubDir, 'link.txt'))).toBe('target.txt');
       });
 
       it('should preserve multiple .git files when deleteOrphaned is enabled', async () => {

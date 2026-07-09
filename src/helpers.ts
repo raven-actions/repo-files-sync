@@ -9,7 +9,7 @@ import { Minimatch } from 'minimatch';
 import type { ForEachCallback, FileConfig, RepoInfo, RepoConfig } from './types.js';
 
 /**
- * Recursively reads all files in a directory, returning relative paths
+ * Recursively reads all files and symbolic links in a directory, returning relative paths
  * Native replacement for node-readfiles
  * @internal Exported for testing
  */
@@ -18,8 +18,7 @@ export async function readFilesRecursive(dir: string, includeHidden = false): Pr
   const files: string[] = [];
 
   for (const entry of entries) {
-    // Skip directories, only include files
-    if (!entry.isFile()) {
+    if (!entry.isFile() && !entry.isSymbolicLink()) {
       continue;
     }
 
@@ -133,6 +132,33 @@ export function execGit(args: string[], workingDir?: string, trimResult = true):
 }
 
 /**
+ * Execute a git command and return its output without text decoding
+ */
+export function execGitBuffer(args: string[], workingDir?: string): Promise<Buffer> {
+  const printableArgs = args.map((arg) => JSON.stringify(arg)).join(' ');
+  core.debug(`EXEC: "git ${printableArgs}" IN ${workingDir ?? 'default'}`);
+
+  return new Promise((resolve, reject) => {
+    execFile(
+      'git',
+      args,
+      {
+        cwd: workingDir,
+        maxBuffer: 1024 * 1024 * 101,
+        encoding: 'buffer'
+      },
+      (error, stdout) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(stdout);
+        }
+      }
+    );
+  });
+}
+
+/**
  * Adds a trailing slash to a path if it doesn't have one
  */
 export function addTrailingSlash(str: string): string {
@@ -145,6 +171,61 @@ export function addTrailingSlash(str: string): string {
 export async function pathIsDirectory(filePath: string): Promise<boolean> {
   const stat = await fs.lstat(filePath);
   return stat.isDirectory();
+}
+
+function isPathWithinRoot(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+}
+
+/**
+ * Resolve a repository-relative path and reject traversal, Git metadata, and
+ * existing symlink ancestors that escape the repository root.
+ */
+export async function resolvePathWithinRoot(root: string, input: string, label: string): Promise<string> {
+  if (!input || path.isAbsolute(input)) {
+    throw new Error(`${label} path "${input}" must be relative to the repository root`);
+  }
+
+  const absoluteRoot = path.resolve(root);
+  const resolvedPath = path.resolve(absoluteRoot, input);
+
+  if (!isPathWithinRoot(absoluteRoot, resolvedPath)) {
+    throw new Error(`${label} path "${input}" escapes the repository root`);
+  }
+
+  const relativeSegments = path.relative(absoluteRoot, resolvedPath).split(path.sep);
+  if (relativeSegments.some((segment) => segment.toLowerCase() === '.git')) {
+    throw new Error(`${label} path "${input}" cannot target Git metadata`);
+  }
+
+  let existingPath = resolvedPath;
+  while (existingPath !== absoluteRoot) {
+    try {
+      await fs.lstat(existingPath);
+      break;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') {
+        throw error;
+      }
+      existingPath = path.dirname(existingPath);
+    }
+  }
+
+  try {
+    const [realRoot, realExistingPath] = await Promise.all([fs.realpath(absoluteRoot), fs.realpath(existingPath)]);
+    if (!isPathWithinRoot(realRoot, realExistingPath)) {
+      throw new Error(`${label} path "${input}" escapes the repository root through a symbolic link`);
+    }
+  } catch (error) {
+    if ((error as Error).message.includes('escapes the repository root')) {
+      throw error;
+    }
+    throw new Error(`${label} path "${input}" contains an invalid symbolic link`, { cause: error });
+  }
+
+  return resolvedPath;
 }
 
 /**
@@ -178,17 +259,20 @@ function normalizePattern(pattern: string, sourceRoot: string): string {
   const trimmed = pattern.trim();
   if (!trimmed) return '';
 
-  const posixPattern = toPosix(trimmed).replace(/^\.\//, '');
+  const posixPattern = toPosix(trimmed);
+  const negated = posixPattern.startsWith('!');
+  const patternBody = (negated ? posixPattern.slice(1) : posixPattern).replace(/^\.\//, '');
   const normalizedSource = toPosix(sourceRoot).replace(/\/+$/, '');
 
-  if (posixPattern.startsWith(`${normalizedSource}/`)) {
-    return posixPattern.slice(normalizedSource.length + 1);
+  if (patternBody.startsWith(`${normalizedSource}/`)) {
+    const relativePattern = patternBody.slice(normalizedSource.length + 1);
+    return negated ? `!${relativePattern}` : relativePattern;
   }
 
-  return posixPattern;
+  return negated ? `!${patternBody}` : patternBody;
 }
 
-function buildMatcher(patterns: string[] | undefined, sourceRoot: string): ((target: string) => boolean) | undefined {
+function buildMatcher(patterns: string[] | undefined, sourceRoot: string): ((targets: string[]) => boolean) | undefined {
   if (!patterns || patterns.length === 0) {
     return undefined;
   }
@@ -202,10 +286,21 @@ function buildMatcher(patterns: string[] | undefined, sourceRoot: string): ((tar
   }
 
   const matchers = normalized.map((pattern) => {
-    const patternToUse = pattern.endsWith('/') ? `${pattern}**` : pattern;
-    return new Minimatch(patternToUse, { dot: false });
+    const negated = pattern.startsWith('!');
+    const patternBody = negated ? pattern.slice(1) : pattern;
+    const patternToUse = patternBody.endsWith('/') ? `${patternBody}**` : patternBody;
+    return { negated, matcher: new Minimatch(patternToUse, { dot: false, nonegate: true }) };
   });
-  return (target: string): boolean => matchers.some((matcher) => matcher.match(target));
+  const positiveMatchers = matchers.filter(({ negated }) => !negated);
+  const negativeMatchers = matchers.filter(({ negated }) => negated);
+
+  return (targets: string[]): boolean => {
+    const matchesPositive =
+      positiveMatchers.length === 0 ||
+      positiveMatchers.some(({ matcher }) => targets.some((target) => matcher.match(target)));
+    const matchesNegative = negativeMatchers.some(({ matcher }) => targets.some((target) => matcher.match(target)));
+    return matchesPositive && !matchesNegative;
+  };
 }
 
 /**
@@ -225,10 +320,17 @@ export function createFilterFunc(
     const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(root, filePath);
     const relative = toPosix(path.relative(root, absolutePath));
     const basename = path.posix.basename(relative);
-    const candidates = relative ? [relative, basename] : [basename];
+    const segments = relative.split('/').filter((segment) => segment.length > 0);
+    const ancestors = segments.slice(0, -1).map((_, index) => segments.slice(0, index + 1).join('/'));
+    const candidates = [...new Set([relative, basename, ...segments, ...ancestors].filter((candidate) => candidate.length > 0))];
 
-    if (relative.startsWith('..')) {
+    if (relative === '..' || relative.startsWith('../')) {
       return true; // Do not filter files outside the source root
+    }
+
+    if (segments.some((segment) => segment.toLowerCase() === '.git')) {
+      core.debug(`Excluding ${relative} because Git metadata cannot be copied`);
+      return false;
     }
 
     // Always allow directories so traversal continues; filtering applies to files
@@ -240,11 +342,11 @@ export function createFilterFunc(
       // If stat fails, fall through to pattern checks
     }
 
-    if (compiledInclude && !candidates.some((candidate) => compiledInclude(candidate))) {
+    if (compiledInclude && !compiledInclude(candidates)) {
       core.debug(`Excluding ${relative} because it did not match include patterns`);
       return false;
     }
-    const isExcluded = compiledExclude ? candidates.some((candidate) => compiledExclude(candidate)) : false;
+    const isExcluded = compiledExclude ? compiledExclude(candidates) : false;
 
     if (isExcluded) {
       core.debug(`Excluding ${relative} because it matched exclude patterns`);
@@ -268,7 +370,7 @@ export async function copy(
   const deleteOrphaned = isDirectory && file.deleteOrphaned;
   const { exclude, template, replace } = file;
   const filterFunc = createFilterFunc(src, exclude, file.include);
-  const shouldFilter = exclude !== undefined || file.include !== undefined;
+  const shouldFilter = isDirectory || exclude !== undefined || file.include !== undefined;
 
   const shouldSkipDest = async (destPath: string): Promise<boolean> => {
     if (replace !== false) {
@@ -300,7 +402,13 @@ export async function copy(
           continue;
         }
 
-        await write(srcPath, destPath, templateContext, item.repo);
+        const sourceStat = await fs.lstat(srcPath);
+        if (sourceStat.isSymbolicLink()) {
+          await fs.ensureDir(path.dirname(destPath));
+          await fs.copy(srcPath, destPath, { dereference: false });
+        } else {
+          await write(srcPath, destPath, templateContext, item.repo);
+        }
       }
     } else {
       core.debug(`Render file ${src} to ${dest}`);
@@ -328,7 +436,7 @@ export async function copy(
 
       for (const relativeFile of files) {
         const absoluteSrc = path.join(src, relativeFile);
-        if (shouldFilter && !filterFunc(absoluteSrc)) {
+        if (!filterFunc(absoluteSrc)) {
           continue;
         }
 
@@ -339,23 +447,10 @@ export async function copy(
         }
 
         await fs.ensureDir(path.dirname(absoluteDest));
-        await fs.copyFile(absoluteSrc, absoluteDest);
-      }
-    } else if (shouldFilter) {
-      const files = await readFilesRecursive(src, true);
-
-      for (const relativeFile of files) {
-        const absoluteSrc = path.join(src, relativeFile);
-        if (!filterFunc(absoluteSrc)) {
-          continue;
-        }
-
-        const absoluteDest = path.join(dest, relativeFile);
-        await fs.ensureDir(path.dirname(absoluteDest));
-        await fs.copyFile(absoluteSrc, absoluteDest);
+        await fs.copy(absoluteSrc, absoluteDest, { dereference: false });
       }
     } else {
-      await fs.copy(src, dest);
+      await fs.copy(src, dest, { filter: filterFunc });
     }
   }
 

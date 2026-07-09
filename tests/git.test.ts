@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as core from '@actions/core';
 import * as os from 'os';
+import * as path from 'path';
 
 // Hoist mocks to be available before module imports
-const { execGitMock, removeMock } = vi.hoisted(() => ({
+const { execGitMock, execGitBufferMock, removeMock } = vi.hoisted(() => ({
   execGitMock: vi.fn().mockResolvedValue(''),
+  execGitBufferMock: vi.fn().mockResolvedValue(Buffer.alloc(0)),
   removeMock: vi.fn().mockResolvedValue(undefined)
 }));
 
@@ -52,6 +54,7 @@ vi.mock('@actions/github/lib/utils', () => ({
           git: {
             getCommit: vi.fn(),
             getTree: vi.fn(),
+            createBlob: vi.fn(),
             createTree: vi.fn(),
             createCommit: vi.fn(),
             updateRef: vi.fn(),
@@ -96,11 +99,22 @@ vi.mock('../src/helpers.js', () => ({
     return strings.reduce((acc, str, i) => acc + str + (values[i] ?? ''), '');
   }),
   execGit: execGitMock,
+  execGitBuffer: execGitBufferMock,
   remove: removeMock
 }));
 
 import Git from '../src/git.js';
 import type { RepoInfo } from '../src/types.js';
+
+interface GitApiMocks {
+  github: {
+    git: {
+      createBlob: ReturnType<typeof vi.fn>;
+      createTree: ReturnType<typeof vi.fn>;
+      createCommit: ReturnType<typeof vi.fn>;
+    };
+  };
+}
 
 describe('git.ts - Git class', () => {
   let git: Git;
@@ -202,7 +216,7 @@ describe('git.ts - Git class', () => {
       await git.createPrBranch();
 
       expect(execGitMock).toHaveBeenCalledWith(
-        ['switch', expect.stringContaining('main')],
+        ['switch', '--track', '-c', expect.stringContaining('main'), expect.stringContaining('origin/')],
         expect.any(String)
       );
     });
@@ -212,7 +226,7 @@ describe('git.ts - Git class', () => {
 
       // Should include the suffix in the branch name
       expect(execGitMock).toHaveBeenCalledWith(
-        ['switch', expect.stringContaining('custom-suffix')],
+        ['switch', '--track', '-c', expect.stringContaining('custom-suffix'), expect.stringContaining('origin/')],
         expect.any(String)
       );
     });
@@ -225,10 +239,10 @@ describe('git.ts - Git class', () => {
     });
 
     it('should add file to staging', async () => {
-      await git.add('test-file.txt');
+      await git.add('[draft].txt');
 
       expect(execGitMock).toHaveBeenCalledWith(
-        ['add', '-f', 'test-file.txt'],
+        ['add', '-f', '--', ':(literal)[draft].txt'],
         expect.any(String)
       );
     });
@@ -241,10 +255,10 @@ describe('git.ts - Git class', () => {
     });
 
     it('should remove file from repo', async () => {
-      await git.remove('test-file.txt');
+      await git.remove('[draft].txt');
 
       expect(execGitMock).toHaveBeenCalledWith(
-        ['rm', '-f', 'test-file.txt'],
+        ['rm', '-r', '-f', '--', ':(literal)[draft].txt'],
         expect.any(String)
       );
     });
@@ -296,6 +310,88 @@ describe('git.ts - Git class', () => {
       await git.commit(message);
 
       expect(execGitMock).toHaveBeenCalledWith(['commit', '-m', message], expect.any(String));
+    });
+  });
+
+  describe('uploadGitHubBlob', () => {
+    it('should preserve binary bytes when encoding a blob', async () => {
+      execGitMock.mockResolvedValue('main');
+      await git.initRepo(mockRepoInfo);
+
+      const content = Buffer.from([0x00, 0xff, 0x80, 0x41, 0x0a]);
+      execGitBufferMock.mockResolvedValueOnce(content);
+
+      await git.uploadGitHubBlob('blob-sha');
+
+      expect(execGitBufferMock).toHaveBeenCalledWith(['cat-file', '-p', 'blob-sha'], git.workingDir);
+      expect((git as unknown as GitApiMocks).github.git.createBlob).toHaveBeenCalledWith({
+        owner: 'test',
+        repo: 'repo',
+        content: content.toString('base64'),
+        encoding: 'base64'
+      });
+    });
+
+    it('should bound concurrent blob uploads', async () => {
+      execGitMock.mockResolvedValue('main');
+      await git.initRepo(mockRepoInfo);
+
+      vi.spyOn(git, 'getTreeId').mockResolvedValueOnce('current-tree').mockResolvedValueOnce('previous-tree');
+      vi.spyOn(git, 'getCommitMessage').mockResolvedValue('sync files');
+      vi.spyOn(git, 'getTreeDiff').mockResolvedValue(
+        Array.from({ length: 10 }, (_, index) => ({
+          newMode: '100644',
+          previousMode: '100644',
+          newBlob: `blob-${index}`,
+          previousBlob: `old-blob-${index}`,
+          change: 'M',
+          path: `file-${index}.txt`
+        }))
+      );
+
+      let activeUploads = 0;
+      let maxActiveUploads = 0;
+      vi.spyOn(git, 'uploadGitHubBlob').mockImplementation(async () => {
+        activeUploads += 1;
+        maxActiveUploads = Math.max(maxActiveUploads, activeUploads);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        activeUploads -= 1;
+      });
+
+      const gitInternals = git as unknown as GitApiMocks;
+      gitInternals.github.git.createTree.mockResolvedValue({ data: { sha: 'created-tree' } });
+      gitInternals.github.git.createCommit.mockResolvedValue({ data: { sha: 'created-commit' } });
+
+      await git.createGithubCommit('local-commit');
+
+      expect(maxActiveUploads).toBe(4);
+      expect(git.uploadGitHubBlob).toHaveBeenCalledTimes(10);
+    });
+  });
+
+  describe('push', () => {
+    it('should refuse to push when the remote branch changed after checkout', async () => {
+      execGitMock.mockResolvedValue('main');
+      await git.initRepo(mockRepoInfo);
+
+      const gitInternals = git as unknown as {
+        prBranch: string;
+        remoteBranchHead: string;
+      };
+      gitInternals.prBranch = 'sync/repo/main';
+      gitInternals.remoteBranchHead = 'original-head';
+      execGitMock.mockImplementation((args: string[]) => {
+        if (args.join(' ') === 'rev-parse --verify origin/sync/repo/main') {
+          return Promise.resolve('changed-head');
+        }
+        return Promise.resolve('');
+      });
+
+      await expect(git.push()).rejects.toThrow(
+        'Remote branch sync/repo/main changed since checkout; refusing to overwrite manual changes.'
+      );
+
+      expect(execGitMock).not.toHaveBeenCalledWith(expect.arrayContaining(['push']), expect.any(String));
     });
   });
 
@@ -436,6 +532,24 @@ describe('git.ts - edge cases', () => {
       expect(git.workingDir).toContain('org');
       expect(git.workingDir).toContain('unique-repo');
     });
+
+    it('should sanitize an Enterprise host port for Windows paths', async () => {
+      const git = new Git();
+      execGitMock.mockResolvedValue('main');
+
+      await git.initRepo({
+        url: 'https://github.example.com:8443/org/repo',
+        fullName: 'github.example.com:8443/org/repo',
+        uniqueName: 'github.example.com:8443/org/repo@main',
+        host: 'github.example.com:8443',
+        user: 'org',
+        name: 'repo',
+        branch: 'main'
+      });
+
+      const relativeWorkingDir = path.relative(os.tmpdir(), git.workingDir);
+      expect(relativeWorkingDir.split(path.sep)[0]).toBe('github.example.com_8443');
+    });
   });
 
   describe('getCommitsToPush', () => {
@@ -487,6 +601,42 @@ describe('git.ts - edge cases', () => {
 
       const commits = await (git as unknown as { getCommitsToPush: () => Promise<string[]> }).getCommitsToPush();
       expect(commits).toEqual([]);
+    });
+  });
+
+  describe('getTreeDiff', () => {
+    it('should preserve spaces and Unicode in NUL-delimited paths', async () => {
+      const git = new Git();
+      execGitMock.mockResolvedValue(
+        ':100644 100644 current-blob previous-blob M\0docs/My File ü.txt\0' +
+          ':100644 000000 deleted-blob 0000000000000000000000000000000000000000 D\0old\tfile.txt\0'
+      );
+
+      const result = await git.getTreeDiff('current-tree', 'previous-tree');
+
+      expect(execGitMock).toHaveBeenCalledWith(
+        ['diff-tree', '-r', '-z', '--no-commit-id', 'current-tree', 'previous-tree'],
+        undefined,
+        false
+      );
+      expect(result).toEqual([
+        {
+          newMode: '100644',
+          previousMode: '100644',
+          newBlob: 'current-blob',
+          previousBlob: 'previous-blob',
+          change: 'M',
+          path: 'docs/My File ü.txt'
+        },
+        {
+          newMode: '100644',
+          previousMode: '000000',
+          newBlob: 'deleted-blob',
+          previousBlob: '0000000000000000000000000000000000000000',
+          change: 'D',
+          path: 'old\tfile.txt'
+        }
+      ]);
     });
   });
 

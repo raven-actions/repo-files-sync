@@ -2,7 +2,33 @@
 allowBuilds:
   esbuild: true
 
+overrides:
+  undici: 6.27.0
+
 # Delay adopting just-published versions to avoid pulling in broken or yanked
 # releases during install/update (including `pnpm up --latest`).
 # Value is in minutes; 4320 = 3 days.
 minimumReleaseAge: 4320
+
+minimumReleaseAgeExclude:
+  - '@typescript/typescript-aix-ppc64@7.0.2'
+  - '@typescript/typescript-darwin-arm64@7.0.2'
+  - '@typescript/typescript-darwin-x64@7.0.2'
+  - '@typescript/typescript-freebsd-arm64@7.0.2'
+  - '@typescript/typescript-freebsd-x64@7.0.2'
+  - '@typescript/typescript-linux-arm64@7.0.2'
+  - '@typescript/typescript-linux-arm@7.0.2'
+  - '@typescript/typescript-linux-loong64@7.0.2'
+  - '@typescript/typescript-linux-mips64el@7.0.2'
+  - '@typescript/typescript-linux-ppc64@7.0.2'
+  - '@typescript/typescript-linux-riscv64@7.0.2'
+  - '@typescript/typescript-linux-s390x@7.0.2'
+  - '@typescript/typescript-linux-x64@7.0.2'
+  - '@typescript/typescript-netbsd-arm64@7.0.2'
+  - '@typescript/typescript-netbsd-x64@7.0.2'
+  - '@typescript/typescript-openbsd-arm64@7.0.2'
+  - '@typescript/typescript-openbsd-x64@7.0.2'
+  - '@typescript/typescript-sunos-x64@7.0.2'
+  - '@typescript/typescript-win32-arm64@7.0.2'
+  - '@typescript/typescript-win32-x64@7.0.2'
+  - typescript@7.0.2

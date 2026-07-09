@@ -19,8 +19,10 @@ import {
   forEach,
   dedent,
   execGit,
+  execGitBuffer,
   addTrailingSlash,
   pathIsDirectory,
+  resolvePathWithinRoot,
   createFilterFunc,
   arrayEquals,
   remove
@@ -56,6 +58,38 @@ describe('helpers.ts', () => {
 
       const filter = createFilterFunc(root, undefined, ['**/*.nope']);
       expect(filter(subDir)).toBe(true);
+    });
+
+    it('should apply negated include patterns to the full pattern set', () => {
+      const root = path.join(testDir, 'negated-include');
+      const filter = createFilterFunc(root, undefined, ['src/**', '!./src/generated/**']);
+
+      expect(filter(path.join(root, 'src', 'index.ts'))).toBe(true);
+      expect(filter(path.join(root, 'src', 'generated', 'client.ts'))).toBe(false);
+      expect(filter(path.join(root, 'docs', 'guide.ts'))).toBe(false);
+    });
+
+    it('should exclude descendants of a bare directory pattern', () => {
+      const root = path.join(testDir, 'directory-exclude');
+      const filter = createFilterFunc(root, ['node_modules'], undefined);
+
+      expect(filter(path.join(root, 'node_modules', 'package', 'index.js'))).toBe(false);
+      expect(filter(path.join(root, 'src', 'index.js'))).toBe(true);
+    });
+
+    it('should filter an in-root filename that begins with two dots', () => {
+      const root = path.join(testDir, 'dot-prefix');
+      const filter = createFilterFunc(root, ['..debug.log'], undefined);
+
+      expect(filter(path.join(root, '..debug.log'))).toBe(false);
+    });
+
+    it('should always exclude Git metadata', () => {
+      const root = path.join(testDir, 'git-metadata');
+      const filter = createFilterFunc(root, undefined, undefined);
+
+      expect(filter(path.join(root, '.git', 'config'))).toBe(false);
+      expect(filter(path.join(root, '.gitignore'))).toBe(true);
     });
   });
 
@@ -234,6 +268,81 @@ describe('helpers.ts', () => {
 
       expect(result).toContain('rm -rf');
       expect(result).toContain('$(whoami)');
+    });
+
+    it('should return binary output without UTF-8 decoding', async () => {
+      const repoDir = path.join(os.tmpdir(), `exec-git-buffer-test-${Date.now()}`);
+      const expected = Buffer.from([0x00, 0xff, 0x80, 0x41, 0x0a]);
+      await fs.ensureDir(repoDir);
+
+      try {
+        await execGit(['init'], repoDir);
+        await fs.writeFile(path.join(repoDir, 'binary.bin'), expected);
+        const blob = await execGit(['hash-object', '-w', 'binary.bin'], repoDir);
+
+        const result = await execGitBuffer(['cat-file', '-p', blob], repoDir);
+
+        expect(result).toEqual(expected);
+      } finally {
+        await fs.remove(repoDir);
+      }
+    });
+
+    it('should read blobs larger than the previous 20 MiB limit', async () => {
+      const repoDir = path.join(os.tmpdir(), `exec-git-large-buffer-test-${Date.now()}`);
+      const expected = Buffer.alloc(21 * 1024 * 1024, 0xa5);
+      await fs.ensureDir(repoDir);
+
+      try {
+        await execGit(['init'], repoDir);
+        await fs.writeFile(path.join(repoDir, 'large.bin'), expected);
+        const blob = await execGit(['hash-object', '-w', 'large.bin'], repoDir);
+
+        const result = await execGitBuffer(['cat-file', '-p', blob], repoDir);
+
+        expect(result.byteLength).toBe(expected.byteLength);
+        expect(result[0]).toBe(0xa5);
+        expect(result[result.length - 1]).toBe(0xa5);
+      } finally {
+        await fs.remove(repoDir);
+      }
+    });
+  });
+
+  describe('resolvePathWithinRoot', () => {
+    let rootDir: string;
+
+    beforeEach(async () => {
+      rootDir = path.join(os.tmpdir(), `safe-path-test-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+      await fs.ensureDir(rootDir);
+    });
+
+    afterEach(async () => {
+      await fs.remove(rootDir);
+    });
+
+    it('should resolve a repository-relative path', async () => {
+      await expect(resolvePathWithinRoot(rootDir, 'docs/file.txt', 'Source')).resolves.toBe(
+        path.resolve(rootDir, 'docs/file.txt')
+      );
+    });
+
+    it('should reject traversal outside the repository root', async () => {
+      await expect(resolvePathWithinRoot(rootDir, '../outside.txt', 'Destination')).rejects.toThrow(
+        'escapes the repository root'
+      );
+    });
+
+    it('should reject absolute paths', async () => {
+      await expect(resolvePathWithinRoot(rootDir, path.resolve(rootDir, 'file.txt'), 'Source')).rejects.toThrow(
+        'must be relative'
+      );
+    });
+
+    it('should reject Git metadata paths', async () => {
+      await expect(resolvePathWithinRoot(rootDir, '.git/config', 'Destination')).rejects.toThrow(
+        'cannot target Git metadata'
+      );
     });
   });
 
@@ -502,5 +611,15 @@ describe('helpers.ts - readFilesRecursive', () => {
     expect(files).toContain('file.txt');
     // Empty directory should not appear
     expect(files).not.toContain('emptydir');
+  });
+
+  it.skipIf(process.platform === 'win32')('should include symbolic links without traversing them', async () => {
+    await fs.writeFile(path.join(tempDir, 'target.txt'), 'content');
+    await fs.symlink('target.txt', path.join(tempDir, 'link.txt'));
+
+    const files = await readFilesRecursive(tempDir);
+
+    expect(files).toContain('target.txt');
+    expect(files).toContain('link.txt');
   });
 });

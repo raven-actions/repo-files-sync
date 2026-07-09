@@ -1,5 +1,8 @@
 import * as core from '@actions/core';
+import { Ajv } from 'ajv/dist/ajv.js';
 import * as yaml from 'js-yaml';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
 import fs from 'fs-extra';
 
 import { getInput, getBooleanInput, getArrayInput, getOptionalInput, getDisableableInput, getDisableableArrayInput } from './input.js';
@@ -101,12 +104,20 @@ try {
  * Parse a repository name string into a RepoInfo object
  */
 function parseRepoName(fullRepo: string): RepoInfo {
-  let host = new URL(context.GITHUB_SERVER_URL).host;
+  const serverHost = new URL(context.GITHUB_SERVER_URL).host;
+  let host = serverHost;
   let repoPath = fullRepo;
 
   if (fullRepo.startsWith('http')) {
     const url = new URL(fullRepo);
     host = url.host;
+
+    if (host.toLowerCase() !== serverHost.toLowerCase()) {
+      throw new Error(
+        `Target host "${host}" does not match GITHUB_SERVER_URL host "${serverHost}"; cross-host sync is not supported`
+      );
+    }
+
     repoPath = url.pathname.replace(/^\/+/, ''); // Remove leading slash
     core.info('Using custom host');
   }
@@ -185,7 +196,31 @@ function parseFiles(files: (string | RawFileConfig)[]): FileConfig[] {
 /**
  * YAML configuration object type
  */
-type YamlConfig = Record<string, (string | RawFileConfig)[] | { group: GroupConfig | GroupConfig[] }>;
+type YamlConfig = Record<string, (string | RawFileConfig)[] | GroupConfig | GroupConfig[]>;
+
+const schemaPath = fileURLToPath(new URL('../sync.schema.json', import.meta.url));
+const schema = JSON.parse(readFileSync(schemaPath, 'utf8')) as object;
+const ajv = new Ajv({ allErrors: true, strict: false });
+const validateConfig = ajv.compile<YamlConfig>(schema);
+
+function assertValidConfig(configObject: unknown): asserts configObject is YamlConfig {
+  if (!validateConfig(configObject)) {
+    throw new Error(
+      `Invalid sync configuration: ${ajv.errorsText(validateConfig.errors, {
+        dataVar: 'configuration',
+        separator: '; '
+      })}`
+    );
+  }
+}
+
+function loadConfigDocument(content: string): unknown {
+  try {
+    return yaml.load(content);
+  } catch (error) {
+    throw new Error(`Invalid sync configuration: ${(error as Error).message}`, { cause: error });
+  }
+}
 
 /**
  * Build the identifiers a repo can be matched by when filtering with REPOS.
@@ -240,14 +275,16 @@ function filterRepos(repos: RepoConfig[]): RepoConfig[] {
  * Parse the sync configuration file and return an array of RepoConfig objects
  */
 export async function parseConfig(): Promise<RepoConfig[]> {
-  let configObject: YamlConfig;
+  let configObject: unknown;
 
   if (context.INLINE_CONFIG) {
-    configObject = yaml.load(context.INLINE_CONFIG) as YamlConfig;
+    configObject = loadConfigDocument(context.INLINE_CONFIG);
   } else {
     const fileContent = await fs.promises.readFile(context.CONFIG_PATH);
-    configObject = yaml.load(fileContent.toString()) as YamlConfig;
+    configObject = loadConfigDocument(fileContent.toString());
   }
+
+  assertValidConfig(configObject);
 
   const result: Record<string, RepoConfig> = {};
 

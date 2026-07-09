@@ -15,7 +15,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import Ajv from 'ajv';
+import { Ajv } from 'ajv/dist/ajv.js';
 
 import { FILE_CONFIG_KEYS, GROUP_KEYS } from '../src/types.js';
 
@@ -87,7 +87,9 @@ describe('sync.schema.json', () => {
       'group with unknown key': [{ group: { repos: 'o/r', files: ['x'], bogus: 1 } }],
       'repos wrong type': [{ group: { repos: 123, files: ['x'] } }],
       'empty files list': [{ group: { repos: 'o/r', files: [] } }],
-      'repo value object without group': [{ 'owner/repo': { foo: 1 } }]
+      'repo value object without group': [{ 'owner/repo': { foo: 1 } }],
+      'group wrapper under a repository key': [{ 'owner/repo': { group: { repos: 'o/r', files: ['x'] } } }],
+      'quoted destructive boolean': [{ 'owner/repo': [{ source: 'x', deleteOrphaned: 'false' }] }]
     };
 
     Object.entries(invalidConfigs).forEach(([name, [config]]) => {

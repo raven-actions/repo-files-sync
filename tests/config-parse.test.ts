@@ -385,6 +385,7 @@ group:
     });
 
     it('should parse custom host URL', async () => {
+      process.env['GITHUB_SERVER_URL'] = 'https://github.enterprise.com';
       const configYaml = `
 https://github.enterprise.com/org/repo:
   - file.txt
@@ -397,6 +398,18 @@ https://github.enterprise.com/org/repo:
       expect(result[0]?.repo.host).toBe('github.enterprise.com');
       expect(result[0]?.repo.user).toBe('org');
       expect(result[0]?.repo.name).toBe('repo');
+    });
+
+    it('should reject a target URL on a different host', async () => {
+      const configYaml = `
+https://untrusted.example.com/org/repo:
+  - file.txt
+`;
+      mockFileContents['.github/sync.yml'] = configYaml;
+
+      const { parseConfig } = await import('../src/config.js');
+
+      await expect(parseConfig()).rejects.toThrow('cross-host sync is not supported');
     });
 
     it('should apply default values for file config', async () => {
@@ -552,6 +565,27 @@ group:
   });
 
   describe('edge cases', () => {
+    it('should reject quoted booleans instead of enabling destructive options', async () => {
+      mockFileContents['.github/sync.yml'] = `
+user/repo:
+  - source: src/
+    replace: "false"
+    deleteOrphaned: "false"
+`;
+
+      const { parseConfig } = await import('../src/config.js');
+
+      await expect(parseConfig()).rejects.toThrow('Invalid sync configuration');
+    });
+
+    it('should reject an empty YAML document', async () => {
+      mockFileContents['.github/sync.yml'] = '# empty configuration';
+
+      const { parseConfig } = await import('../src/config.js');
+
+      await expect(parseConfig()).rejects.toThrow('Invalid sync configuration');
+    });
+
     it('should handle repo with dots in name', async () => {
       const configYaml = `
 user/repo.js:

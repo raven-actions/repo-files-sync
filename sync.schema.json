@@ -5,14 +5,7 @@
   "description": "Configuration schema for repo-files-sync GitHub Action sync.yml file",
   "type": "object",
   "additionalProperties": {
-    "oneOf": [
-      {
-        "$ref": "#/definitions/fileList"
-      },
-      {
-        "$ref": "#/definitions/groupWrapper"
-      }
-    ]
+    "$ref": "#/definitions/fileList"
   },
   "properties": {
     "group": {
@@ -182,7 +175,7 @@
     },
     "groupWrapper": {
       "type": "object",
-      "description": "Wrapper object containing group configuration(s)",
+      "description": "Deprecated wrapper definition retained for schema compatibility",
       "required": ["group"],
       "additionalProperties": false,
       "properties": {

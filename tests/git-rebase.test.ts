@@ -158,8 +158,9 @@ describe('git.ts - REBASE mode', () => {
 
     await git.push();
 
-    const forcePush = findCall((a) => a[0] === 'push' && a.includes('--force'));
+    const forcePush = findCall((a) => a[0] === 'push' && a.some((arg) => arg.startsWith('--force-with-lease=')));
     expect(forcePush).toBeDefined();
+    expect(forcePush?.[0]).toContain('--force-with-lease=refs/heads/sync/main:oldsha123');
     expect((forcePush?.[0] as string[]).some((x) => x.startsWith('HEAD:refs/heads/'))).toBe(true);
   });
 
@@ -170,13 +171,13 @@ describe('git.ts - REBASE mode', () => {
     await git.initRepo(mockRepoInfo);
     await git.createPrBranch();
 
-    // Normal reuse: a plain switch, never a force-create
+    // Normal reuse: track the existing remote branch, never force-create it
     expect(findCall((a) => a[0] === 'switch' && a[1] === '-C')).toBeUndefined();
-    expect(findCall((a) => a[0] === 'switch' && a[1] !== '-c' && a[1] !== '-C')).toBeDefined();
+    expect(findCall((a) => a[0] === 'switch' && a.includes('--track') && a.includes('origin/sync/main'))).toBeDefined();
 
     await git.push();
 
-    expect(findCall((a) => a[0] === 'push' && a.includes('--force'))).toBeUndefined();
+    expect(findCall((a) => a[0] === 'push' && a.some((arg) => arg.startsWith('--force')))).toBeUndefined();
   });
 
   it('does not rebase on the first run when no remote branch exists', async () => {
@@ -191,6 +192,6 @@ describe('git.ts - REBASE mode', () => {
 
     await git.push();
 
-    expect(findCall((a) => a[0] === 'push' && a.includes('--force'))).toBeUndefined();
+    expect(findCall((a) => a[0] === 'push' && a.some((arg) => arg.startsWith('--force')))).toBeUndefined();
   });
 });
