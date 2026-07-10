@@ -5,6 +5,11 @@
  * which has side effects on import (initializeContext runs immediately).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as core from '@actions/core';
+
+const { mockExistsSync } = vi.hoisted(() => ({
+  mockExistsSync: vi.fn(() => false)
+}));
 
 // Store mock values
 const mockInputs: Record<string, string> = {};
@@ -37,7 +42,7 @@ vi.mock('@actions/core', () => ({
 const mockFileContents: Record<string, string> = {};
 vi.mock('fs-extra', () => ({
   default: {
-    existsSync: vi.fn(() => false),
+    existsSync: mockExistsSync,
     promises: {
       readFile: vi.fn((filePath: string) => {
         const content = mockFileContents[filePath];
@@ -58,6 +63,7 @@ describe('config.ts - parseConfig function', () => {
     // Reset mock stores
     Object.keys(mockInputs).forEach(key => delete mockInputs[key]);
     Object.keys(mockFileContents).forEach(key => delete mockFileContents[key]);
+    mockExistsSync.mockReturnValue(false);
 
     // Set required environment
     process.env['GITHUB_SERVER_URL'] = 'https://github.com';
@@ -160,6 +166,20 @@ user/repo:
       const file = result[0]?.files[0];
       expect(file?.exclude).toBeDefined();
       expect(file?.exclude).toHaveLength(3);
+    });
+
+    it('should normalize source-prefixed patterns to the source root', async () => {
+      mockFileContents['.github/sync.yml'] = `
+user/repo:
+  - source: src/
+    include: |
+      src/**/*.ts
+`;
+
+      const { parseConfig } = await import('../src/config.js');
+      const result = await parseConfig();
+
+      expect(result[0]?.files[0]?.include).toEqual(['**/*.ts']);
     });
 
     it('should parse group configuration', async () => {
@@ -382,6 +402,25 @@ group:
       expect(result).toHaveLength(1);
       // Reviewers are unioned and de-duplicated
       expect(result[0]?.reviewers?.sort()).toEqual(['alice', 'bob', 'carol']);
+    });
+
+    it('should add reviewers when an earlier group had none', async () => {
+      mockFileContents['.github/sync.yml'] = `
+group:
+  - repos: user/repo
+    files:
+      - one.txt
+  - repos: user/repo
+    reviewers:
+      - alice
+    files:
+      - two.txt
+`;
+
+      const { parseConfig } = await import('../src/config.js');
+      const result = await parseConfig();
+
+      expect(result[0]?.reviewers).toEqual(['alice']);
     });
 
     it('should parse custom host URL', async () => {
@@ -653,6 +692,16 @@ user/repo@main:
 
       expect(result[0]?.repo.uniqueName).toBe('github.com/user/repo@main');
     });
+
+    it('should tolerate a repository key without a slash', async () => {
+      mockFileContents['.github/sync.yml'] = 'owner:\n  - file.txt';
+
+      const { parseConfig } = await import('../src/config.js');
+      const result = await parseConfig();
+
+      expect(result[0]?.repo.user).toBe('owner');
+      expect(result[0]?.repo.name).toBe('');
+    });
   });
 });
 
@@ -660,6 +709,7 @@ describe('config.ts - context initialization', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     Object.keys(mockInputs).forEach(key => delete mockInputs[key]);
+    mockExistsSync.mockReturnValue(false);
     process.env['GITHUB_SERVER_URL'] = 'https://github.com';
   });
 
@@ -677,6 +727,78 @@ describe('config.ts - context initialization', () => {
     expect(config.default.GITHUB_TOKEN).toBe('ghp_my-pat-token');
     expect(config.default.IS_INSTALLATION_TOKEN).toBe(false);
     expect(config.default.IS_FINE_GRAINED).toBe(false);
+  });
+
+  it('should fail initialization when GH_TOKEN is missing', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit(1)');
+    }) as typeof process.exit);
+
+    try {
+      await expect(import('../src/config.js')).rejects.toThrow('process.exit(1)');
+      expect(core.setFailed).toHaveBeenCalledWith('You must provide GH_TOKEN');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    } finally {
+      exitSpy.mockRestore();
+    }
+  });
+
+  it('should use the public GitHub URL when GITHUB_SERVER_URL is absent', async () => {
+    mockInputs['GH_TOKEN'] = 'token';
+    delete process.env['GITHUB_SERVER_URL'];
+
+    const config = await import('../src/config.js');
+
+    expect(config.default.GITHUB_SERVER_URL).toBe('https://github.com');
+  });
+
+  it('should retain configured Git identity values', async () => {
+    mockInputs['GH_TOKEN'] = 'token';
+    mockInputs['GIT_EMAIL'] = 'sync@example.com';
+    mockInputs['GIT_USERNAME'] = 'sync-user';
+
+    const config = await import('../src/config.js');
+
+    expect(config.default.GIT_EMAIL).toBe('sync@example.com');
+    expect(config.default.GIT_USERNAME).toBe('sync-user');
+  });
+
+  it('should warn when REBASE is combined with SKIP_PR', async () => {
+    mockInputs['GH_TOKEN'] = 'token';
+    mockInputs['REBASE'] = 'true';
+    mockInputs['SKIP_PR'] = 'true';
+
+    await import('../src/config.js');
+
+    expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('REBASE has no effect when SKIP_PR is true'));
+  });
+
+  it('should warn when REBASE cannot reuse an existing pull request', async () => {
+    mockInputs['GH_TOKEN'] = 'token';
+    mockInputs['REBASE'] = 'true';
+    mockInputs['OVERWRITE_EXISTING_PR'] = 'false';
+
+    await import('../src/config.js');
+
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('REBASE has no effect when OVERWRITE_EXISTING_PR is false')
+    );
+  });
+
+  it('should replace a colliding temporary directory', async () => {
+    mockInputs['GH_TOKEN'] = 'token';
+    mockInputs['TMP_DIR'] = 'existing-temp';
+    mockExistsSync.mockReturnValueOnce(true).mockReturnValueOnce(false);
+    const dateSpy = vi.spyOn(Date, 'now').mockReturnValue(123456789);
+
+    try {
+      const config = await import('../src/config.js');
+
+      expect(config.default.TMP_DIR).toBe('tmp-123456789');
+      expect(core.warning).toHaveBeenCalledWith('TEMP_DIR already exists. Using "tmp-123456789" now.');
+    } finally {
+      dateSpy.mockRestore();
+    }
   });
 
   it('should detect an installation token from the ghs_ prefix', async () => {

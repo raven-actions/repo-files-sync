@@ -234,6 +234,26 @@ describe('helpers.ts - copy and write functions', () => {
         expect(content).toBe('Original content');
       });
 
+      it('should skip a templated file excluded by its filter', async () => {
+        const srcFile = path.join(srcDir, 'excluded-template.txt');
+        const destFile = path.join(destDir, 'excluded-template.txt');
+        await fs.writeFile(srcFile, 'Hello {{ name }}!');
+
+        const fileConfig: FileConfig = {
+          source: srcFile,
+          dest: destFile,
+          template: { name: 'World' },
+          replace: true,
+          deleteOrphaned: false,
+          exclude: undefined,
+          include: ['other-template.txt']
+        };
+
+        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig);
+
+        expect(await fs.pathExists(destFile)).toBe(false);
+      });
+
       it('should still copy when exclude patterns are whitespace-only (no-op patterns)', async () => {
         const srcFile = path.join(srcDir, 'whitespace-exclude.txt');
         const destFile = path.join(destDir, 'whitespace-exclude.txt');
@@ -571,6 +591,29 @@ describe('helpers.ts - copy and write functions', () => {
         expect(await fs.pathExists(path.join(destSubDir, 'root.txt'))).toBe(true);
         // File in excluded directory should not be rendered
         expect(await fs.pathExists(path.join(destSubDir, 'subdir', 'file.txt'))).toBe(false);
+      });
+
+      it('should preserve symbolic directories when rendering templates', async () => {
+        const srcSubDir = path.join(srcDir, 'tpl-symlink');
+        const destSubDir = path.join(destDir, 'tpl-symlink');
+        const targetDir = path.join(srcSubDir, 'target');
+        await fs.ensureDir(targetDir);
+        await fs.writeFile(path.join(targetDir, 'file.txt'), 'Name: {{ repo.name }}');
+        await fs.symlink(targetDir, path.join(srcSubDir, 'link'), process.platform === 'win32' ? 'junction' : 'dir');
+
+        const fileConfig: FileConfig = {
+          source: srcSubDir,
+          dest: destSubDir,
+          template: true,
+          replace: true,
+          deleteOrphaned: false,
+          exclude: undefined
+        };
+
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+
+        expect((await fs.lstat(path.join(destSubDir, 'link'))).isSymbolicLink()).toBe(true);
+        expect(await fs.readFile(path.join(destSubDir, 'target', 'file.txt'), 'utf8')).toBe('Name: repo');
       });
     });
 

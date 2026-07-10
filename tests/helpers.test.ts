@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs-extra';
+import fsExtra from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -60,6 +61,38 @@ describe('helpers.ts', () => {
       expect(filter(subDir)).toBe(true);
     });
 
+    it('should accept empty pattern arrays as no filters', () => {
+      const root = path.join(testDir, 'empty-patterns');
+      const filter = createFilterFunc(root, [], []);
+
+      expect(filter('notes.txt')).toBe(true);
+    });
+
+    it('should apply patterns to an existing regular file', async () => {
+      const root = path.join(testDir, 'regular-file');
+      const file = path.join(root, 'notes.txt');
+      await fs.ensureDir(root);
+      await fs.writeFile(file, 'notes');
+
+      const filter = createFilterFunc(root, ['*.txt'], undefined);
+
+      expect(filter(file)).toBe(false);
+    });
+
+    it('should fall through to pattern checks when stat fails', () => {
+      const root = path.join(testDir, 'stat-failure');
+      const lstatSpy = vi.spyOn(fsExtra, 'lstatSync').mockImplementationOnce(() => {
+        throw new Error('stat failed');
+      });
+
+      try {
+        const filter = createFilterFunc(root, ['*.txt'], undefined);
+        expect(filter(path.join(root, 'notes.txt'))).toBe(false);
+      } finally {
+        lstatSpy.mockRestore();
+      }
+    });
+
     it('should apply negated include patterns to the full pattern set', () => {
       const root = path.join(testDir, 'negated-include');
       const filter = createFilterFunc(root, undefined, ['src/**', '!./src/generated/**']);
@@ -67,6 +100,23 @@ describe('helpers.ts', () => {
       expect(filter(path.join(root, 'src', 'index.ts'))).toBe(true);
       expect(filter(path.join(root, 'src', 'generated', 'client.ts'))).toBe(false);
       expect(filter(path.join(root, 'docs', 'guide.ts'))).toBe(false);
+    });
+
+    it('should support a negation-only include set', () => {
+      const root = path.join(testDir, 'negation-only');
+      const filter = createFilterFunc(root, undefined, ['!generated/**']);
+
+      expect(filter('src/index.ts')).toBe(true);
+      expect(filter('generated/client.ts')).toBe(false);
+    });
+
+    it('should normalize a source-prefixed negated pattern', () => {
+      const root = path.join(testDir, 'source-prefixed-negation');
+      const sourcePattern = `${root.replace(/\\/g, '/')}/generated/**`;
+      const filter = createFilterFunc(root, undefined, [`!${sourcePattern}`]);
+
+      expect(filter('src/index.ts')).toBe(true);
+      expect(filter('generated/client.ts')).toBe(false);
     });
 
     it('should exclude descendants of a bare directory pattern', () => {
@@ -225,6 +275,10 @@ describe('helpers.ts', () => {
 
       expect(result).toBe('A and B\nTogether');
     });
+
+    it('should handle multiline content without indentation', () => {
+      expect(dedent('Hello\nWorld')).toBe('Hello\nWorld');
+    });
   });
 
   describe('execGit', () => {
@@ -307,6 +361,10 @@ describe('helpers.ts', () => {
         await fs.remove(repoDir);
       }
     });
+
+    it('should reject when a binary git command fails', async () => {
+      await expect(execGitBuffer(['not-a-real-git-subcommand-xyz'])).rejects.toThrow();
+    });
   });
 
   describe('resolvePathWithinRoot', () => {
@@ -343,6 +401,42 @@ describe('helpers.ts', () => {
       await expect(resolvePathWithinRoot(rootDir, '.git/config', 'Destination')).rejects.toThrow(
         'cannot target Git metadata'
       );
+    });
+
+    it('should reject a symbolic-link ancestor that escapes the root', async () => {
+      const outsideDir = `${rootDir}-outside`;
+      const linkPath = path.join(rootDir, 'escape');
+      await fs.ensureDir(outsideDir);
+
+      try {
+        await fs.symlink(outsideDir, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
+
+        await expect(resolvePathWithinRoot(rootDir, 'escape/file.txt', 'Destination')).rejects.toThrow(
+          'escapes the repository root through a symbolic link'
+        );
+      } finally {
+        await fs.remove(outsideDir);
+      }
+    });
+
+    it('should reject a broken symbolic-link ancestor', async () => {
+      const missingTarget = `${rootDir}-missing`;
+      await fs.symlink(missingTarget, path.join(rootDir, 'broken'), process.platform === 'win32' ? 'junction' : 'dir');
+
+      await expect(resolvePathWithinRoot(rootDir, 'broken/file.txt', 'Source')).rejects.toThrow(
+        'contains an invalid symbolic link'
+      );
+    });
+
+    it('should preserve unexpected filesystem errors while finding an existing ancestor', async () => {
+      const accessError = Object.assign(new Error('access denied'), { code: 'EACCES' });
+      const lstatSpy = vi.spyOn(fsExtra, 'lstat').mockRejectedValueOnce(accessError);
+
+      try {
+        await expect(resolvePathWithinRoot(rootDir, 'blocked/file.txt', 'Source')).rejects.toBe(accessError);
+      } finally {
+        lstatSpy.mockRestore();
+      }
     });
   });
 
@@ -621,5 +715,17 @@ describe('helpers.ts - readFilesRecursive', () => {
 
     expect(files).toContain('target.txt');
     expect(files).toContain('link.txt');
+  });
+
+  it('should include a symbolic directory entry without traversing it', async () => {
+    const targetDir = path.join(tempDir, 'target');
+    await fs.ensureDir(targetDir);
+    await fs.writeFile(path.join(targetDir, 'target.txt'), 'content');
+    await fs.symlink(targetDir, path.join(tempDir, 'link'), process.platform === 'win32' ? 'junction' : 'dir');
+
+    const files = await readFilesRecursive(tempDir);
+
+    expect(files).toContain('target/target.txt');
+    expect(files).toContain('link');
   });
 });

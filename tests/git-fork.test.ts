@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as os from 'os';
 
-const { execGitMock, pullsListMock } = vi.hoisted(() => ({
+const { execGitMock, pullsListMock, compareCommitsMock, pullsCreateMock } = vi.hoisted(() => ({
   execGitMock: vi.fn(),
-  pullsListMock: vi.fn()
+  pullsListMock: vi.fn(),
+  compareCommitsMock: vi.fn(),
+  pullsCreateMock: vi.fn()
 }));
 
 vi.mock('@actions/core', () => ({
@@ -26,14 +28,15 @@ vi.mock('@actions/github/lib/utils', () => ({
         rest = {
           repos: {
             createFork: vi.fn(),
-            compareCommits: vi.fn()
+            compareCommits: compareCommitsMock
           },
           users: {
             getAuthenticated: vi.fn()
           },
           pulls: {
             list: pullsListMock,
-            update: vi.fn()
+            update: vi.fn(),
+            create: pullsCreateMock
           },
           issues: {},
           git: {}
@@ -97,6 +100,8 @@ describe('git.ts - fork workflow', () => {
     pullsListMock.mockResolvedValue({
       data: [{ number: 7, html_url: 'https://github.com/target/repo/pull/7', body: null }]
     });
+    compareCommitsMock.mockResolvedValue({ data: { ahead_by: 1 } });
+    pullsCreateMock.mockResolvedValue({ data: { number: 8, html_url: 'https://github.com/target/repo/pull/8', body: null } });
     execGitMock.mockImplementation((args: string[]) => {
       const command = args.join(' ');
       if (command === 'rev-list -n 1 --all') return Promise.resolve('base-sha');
@@ -126,5 +131,55 @@ describe('git.ts - fork workflow', () => {
     expect(pullsListMock).toHaveBeenCalledWith(
       expect.objectContaining({ state: 'open', head: 'sync-bot:sync/main' })
     );
+  });
+
+  it('should force-update a fork branch with a lease', async () => {
+    const git = new Git();
+    await git.initRepo(repo);
+    const state = git as unknown as {
+      prBranch: string;
+      remoteBranchHead: string;
+      forceUpdateBranch: boolean;
+    };
+    state.prBranch = 'sync/main';
+    state.remoteBranchHead = 'fork-head';
+    state.forceUpdateBranch = true;
+
+    await git.push();
+
+    expect(execGitMock).toHaveBeenCalledWith(
+      ['push', '-u', '--force-with-lease=refs/heads/sync/main:fork-head', 'fork', 'sync/main'],
+      git.workingDir
+    );
+  });
+
+  it('should push an empty fork branch name before a PR branch exists', async () => {
+    const git = new Git();
+    await git.initRepo(repo);
+
+    await git.push();
+
+    expect(execGitMock).toHaveBeenCalledWith(['push', '-u', 'fork', ''], git.workingDir);
+  });
+
+  it('should use the fork owner for closed PRs, comparisons, and new PR heads', async () => {
+    const git = new Git();
+    await git.initRepo(repo);
+    const state = git as unknown as {
+      prBranch: string;
+      baseBranch: string;
+      isBranchBehindBase(branch: string): Promise<boolean>;
+    };
+    state.prBranch = 'sync/main';
+    state.baseBranch = 'main';
+
+    await git.getClosedPr();
+    expect(await state.isBranchBehindBase('sync/main')).toBe(true);
+    const result = await git.createOrUpdatePr('changed');
+
+    expect(pullsListMock).toHaveBeenCalledWith(expect.objectContaining({ state: 'closed', head: 'sync-bot:sync/main' }));
+    expect(compareCommitsMock).toHaveBeenCalledWith(expect.objectContaining({ base: 'sync-bot:sync/main' }));
+    expect(pullsCreateMock).toHaveBeenCalledWith(expect.objectContaining({ head: 'sync-bot:sync/main' }));
+    expect(result.action).toBe('created');
   });
 });

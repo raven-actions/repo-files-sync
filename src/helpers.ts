@@ -23,7 +23,7 @@ export async function readFilesRecursive(dir: string, includeHidden = false): Pr
     }
 
     // Get relative path from the entry
-    const relativePath = entry.parentPath ? path.relative(dir, path.join(entry.parentPath, entry.name)) : entry.name;
+    const relativePath = path.relative(dir, path.join(entry.parentPath, entry.name));
 
     // Skip hidden files/directories if not including them
     if (!includeHidden) {
@@ -66,18 +66,12 @@ export function dedent(templateStrings: TemplateStringsArray | string, ...values
 
   // Remove trailing whitespace from last string
   const lastIndex = strings.length - 1;
-  const lastString = strings[lastIndex];
-  if (lastString !== undefined) {
-    strings[lastIndex] = lastString.replace(/\r?\n([\t ]*)$/, '');
-  }
+  strings[lastIndex] = strings[lastIndex]!.replace(/\r?\n([\t ]*)$/, '');
 
-  for (let i = 0; i < strings.length; i++) {
-    const str = strings[i];
-    if (str !== undefined) {
-      const match = str.match(/\n[\t ]+/g);
-      if (match) {
-        matches.push(...match);
-      }
+  for (const str of strings) {
+    const match = str.match(/\n[\t ]+/g);
+    if (match) {
+      matches.push(...match);
     }
   }
 
@@ -85,21 +79,15 @@ export function dedent(templateStrings: TemplateStringsArray | string, ...values
     const size = Math.min(...matches.map((value) => value.length - 1));
     const pattern = new RegExp(`\n[\t ]{${size}}`, 'g');
     for (let i = 0; i < strings.length; i++) {
-      const str = strings[i];
-      if (str !== undefined) {
-        strings[i] = str.replace(pattern, '\n');
-      }
+      strings[i] = strings[i]!.replace(pattern, '\n');
     }
   }
 
-  const firstString = strings[0];
-  if (firstString !== undefined) {
-    strings[0] = firstString.replace(/^\r?\n/, '');
-  }
+  strings[0] = strings[0]!.replace(/^\r?\n/, '');
 
-  let result = strings[0] ?? '';
+  let result = strings[0]!;
   for (let i = 0; i < values.length; i++) {
-    result += String(values[i]) + (strings[i + 1] ?? '');
+    result += String(values[i]) + strings[i + 1]!;
   }
 
   return result;
@@ -237,7 +225,7 @@ export async function write(
   context: Record<string, unknown> = {},
   repo?: RepoInfo
 ): Promise<void> {
-  const templateContext = typeof context === 'object' ? context : {};
+  const templateContext = context;
 
   // Include current repo constants (e.g., host, user, name, branch, etc.)
   if (repo) {
@@ -460,9 +448,6 @@ export async function copy(
     const destFileList = await readFilesRecursive(dest, true);
 
     const isInScope = (relativePath: string): boolean => {
-      if (!shouldFilter) {
-        return true;
-      }
       // Evaluate filter against the corresponding path under the source root.
       return filterFunc(path.join(src, relativePath));
     };

@@ -123,9 +123,9 @@ function parseRepoName(fullRepo: string): RepoInfo {
   }
 
   const parts = repoPath.split('/');
-  const user = parts[0] ?? '';
+  const user = parts[0] as string;
   const nameWithBranch = parts[1] ?? '';
-  const name = nameWithBranch.split('@')[0] ?? '';
+  const name = nameWithBranch.split('@')[0] as string;
   const branch = repoPath.split('@')[1] || 'default';
 
   return {
@@ -143,7 +143,7 @@ function parseRepoName(fullRepo: string): RepoInfo {
  * Parse glob patterns from a newline-separated string
  */
 function parsePatterns(text: string | undefined, src: string): string[] | undefined {
-  if (text === undefined || typeof text !== 'string') {
+  if (text === undefined) {
     return undefined;
   }
 
@@ -167,30 +167,22 @@ function parsePatterns(text: string | undefined, src: string): string[] | undefi
  * Parse file configurations from YAML
  */
 function parseFiles(files: (string | RawFileConfig)[]): FileConfig[] {
-  return files
-    .map((item): FileConfig | undefined => {
-      const fileItem: RawFileConfig = typeof item === 'string' ? { source: item } : item;
+  return files.map((item): FileConfig => {
+    const fileItem: RawFileConfig = typeof item === 'string' ? { source: item } : item;
+    const deleteOrphaned = fileItem.deleteOrphaned ?? context.DELETE_ORPHANED;
+    const includePatterns = parsePatterns(fileItem.include, fileItem.source);
+    const exclude = parsePatterns(fileItem.exclude, fileItem.source);
 
-      if (fileItem.source !== undefined) {
-        const deleteOrphaned = fileItem.deleteOrphaned ?? context.DELETE_ORPHANED;
-        const includePatterns = parsePatterns(fileItem.include, fileItem.source);
-        const exclude = parsePatterns(fileItem.exclude, fileItem.source);
-
-        return {
-          source: fileItem.source,
-          dest: fileItem.dest || fileItem.source,
-          template: fileItem.template === undefined ? TEMPLATE_DEFAULT : fileItem.template,
-          replace: fileItem.replace === undefined ? REPLACE_DEFAULT : fileItem.replace,
-          deleteOrphaned,
-          exclude,
-          include: includePatterns
-        };
-      }
-
-      core.warning('Warn: No source files specified');
-      return undefined;
-    })
-    .filter((file): file is FileConfig => file !== undefined);
+    return {
+      source: fileItem.source,
+      dest: fileItem.dest || fileItem.source,
+      template: fileItem.template === undefined ? TEMPLATE_DEFAULT : fileItem.template,
+      replace: fileItem.replace === undefined ? REPLACE_DEFAULT : fileItem.replace,
+      deleteOrphaned,
+      exclude,
+      include: includePatterns
+    };
+  });
 }
 
 /**

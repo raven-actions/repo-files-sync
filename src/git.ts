@@ -116,7 +116,7 @@ export default class Git {
     // Avoid path traversal and Windows-invalid characters while keeping it readable.
     // Intentionally avoid control-character regex ranges here to satisfy eslint no-control-regex.
     const sanitized = Array.from(trimmed, (ch) => {
-      const code = ch.codePointAt(0) ?? 0;
+      const code = ch.codePointAt(0)!;
       if (code < 0x20) return '_';
       if ('\\/<>:"|?*'.includes(ch)) return '_';
       return ch;
@@ -390,7 +390,7 @@ export default class Git {
     if (source.endsWith('/')) {
       return Object.keys(this.lastCommitChanges)
         .filter((filePath) => filePath.startsWith(source))
-        .map((key) => this.lastCommitChanges?.[key] ?? '')
+        .map((key) => this.lastCommitChanges![key]!)
         .filter((diff) => diff !== '');
     }
 
