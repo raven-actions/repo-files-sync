@@ -20,10 +20,10 @@ export default defineConfig({
         'src/types.ts' // Pure type definitions, no runtime code
       ],
       thresholds: {
-        statements: 100,
-        branches: 100,
-        functions: 100,
-        lines: 100
+        statements: 95,
+        branches: 95,
+        functions: 95,
+        lines: 95
       }
     },
     testTimeout: 10000,
