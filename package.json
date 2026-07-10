@@ -11,6 +11,7 @@
     "@actions/core": "^3.0.1",
     "@actions/github": "^9.1.1",
     "@octokit/plugin-throttling": "^11.0.3",
+    "ajv": "^8.20.0",
     "fs-extra": "^11.3.6",
     "js-yaml": "^5.2.1",
     "minimatch": "^10.2.5",
@@ -70,7 +71,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --project tsconfig.test.json"
   },
   "type": "module"
 }

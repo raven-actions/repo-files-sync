@@ -234,6 +234,26 @@ describe('helpers.ts - copy and write functions', () => {
         expect(content).toBe('Original content');
       });
 
+      it('should skip a templated file excluded by its filter', async () => {
+        const srcFile = path.join(srcDir, 'excluded-template.txt');
+        const destFile = path.join(destDir, 'excluded-template.txt');
+        await fs.writeFile(srcFile, 'Hello {{ name }}!');
+
+        const fileConfig: FileConfig = {
+          source: srcFile,
+          dest: destFile,
+          template: { name: 'World' },
+          replace: true,
+          deleteOrphaned: false,
+          exclude: undefined,
+          include: ['other-template.txt']
+        };
+
+        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig);
+
+        expect(await fs.pathExists(destFile)).toBe(false);
+      });
+
       it('should still copy when exclude patterns are whitespace-only (no-op patterns)', async () => {
         const srcFile = path.join(srcDir, 'whitespace-exclude.txt');
         const destFile = path.join(destDir, 'whitespace-exclude.txt');
@@ -572,6 +592,29 @@ describe('helpers.ts - copy and write functions', () => {
         // File in excluded directory should not be rendered
         expect(await fs.pathExists(path.join(destSubDir, 'subdir', 'file.txt'))).toBe(false);
       });
+
+      it('should preserve symbolic directories when rendering templates', async () => {
+        const srcSubDir = path.join(srcDir, 'tpl-symlink');
+        const destSubDir = path.join(destDir, 'tpl-symlink');
+        const targetDir = path.join(srcSubDir, 'target');
+        await fs.ensureDir(targetDir);
+        await fs.writeFile(path.join(targetDir, 'file.txt'), 'Name: {{ repo.name }}');
+        await fs.symlink(targetDir, path.join(srcSubDir, 'link'), process.platform === 'win32' ? 'junction' : 'dir');
+
+        const fileConfig: FileConfig = {
+          source: srcSubDir,
+          dest: destSubDir,
+          template: true,
+          replace: true,
+          deleteOrphaned: false,
+          exclude: undefined
+        };
+
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+
+        expect((await fs.lstat(path.join(destSubDir, 'link'))).isSymbolicLink()).toBe(true);
+        expect(await fs.readFile(path.join(destSubDir, 'target', 'file.txt'), 'utf8')).toBe('Name: repo');
+      });
     });
 
     describe('deleteOrphaned', () => {
@@ -757,7 +800,31 @@ describe('helpers.ts - copy and write functions', () => {
         await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
 
         expect(await fs.pathExists(path.join(destSubDir, 'keep.txt'))).toBe(true);
-        // Note: fs.copy filter works on full paths, so this tests the path extraction logic
+        expect(await fs.pathExists(path.join(destSubDir, 'subdir', 'file1.txt'))).toBe(false);
+        expect(await fs.pathExists(path.join(destSubDir, 'subdir', 'file2.txt'))).toBe(false);
+      });
+
+      it.skipIf(process.platform === 'win32')('should preserve symbolic links in filtered directory copies', async () => {
+        const srcSubDir = path.join(srcDir, 'symlink-source');
+        const destSubDir = path.join(destDir, 'symlink-dest');
+
+        await fs.ensureDir(srcSubDir);
+        await fs.writeFile(path.join(srcSubDir, 'target.txt'), 'Target');
+        await fs.symlink('target.txt', path.join(srcSubDir, 'link.txt'));
+
+        const fileConfig: FileConfig = {
+          source: srcSubDir,
+          dest: destSubDir,
+          template: false,
+          replace: true,
+          deleteOrphaned: false,
+          exclude: ['*.tmp']
+        };
+
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+
+        expect((await fs.lstat(path.join(destSubDir, 'link.txt'))).isSymbolicLink()).toBe(true);
+        expect(await fs.readlink(path.join(destSubDir, 'link.txt'))).toBe('target.txt');
       });
 
       it('should preserve multiple .git files when deleteOrphaned is enabled', async () => {

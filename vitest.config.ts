@@ -17,10 +17,14 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: [
         'src/index.ts', // Entry point with side effects
-        'src/git.ts', // Heavy GitHub API/git dependencies, needs integration tests
-        'src/config.ts', // Initializes at module load time
         'src/types.ts' // Pure type definitions, no runtime code
-      ]
+      ],
+      thresholds: {
+        statements: 95,
+        branches: 95,
+        functions: 95,
+        lines: 95
+      }
     },
     testTimeout: 10000,
     hookTimeout: 10000

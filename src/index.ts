@@ -2,7 +2,16 @@ import * as core from '@actions/core';
 import * as fs from 'fs';
 
 import Git from './git.js';
-import { forEach, dedent, addTrailingSlash, pathIsDirectory, copy, remove, arrayEquals } from './helpers.js';
+import {
+  forEach,
+  dedent,
+  addTrailingSlash,
+  pathIsDirectory,
+  resolvePathWithinRoot,
+  copy,
+  remove,
+  arrayEquals
+} from './helpers.js';
 import { parseConfig, default as config } from './config.js';
 
 import type { ModifiedFile, RepoConfig, FileConfig } from './types.js';
@@ -34,8 +43,10 @@ async function processFile(
   modified: ModifiedFile[],
   item: RepoConfig
 ): Promise<void> {
-  const fileExists = fs.existsSync(file.source);
-  const localDestination = `${git.workingDir}/${file.dest}`;
+  const sourceRoot = process.env['GITHUB_WORKSPACE'] || process.cwd();
+  const localSource = await resolvePathWithinRoot(sourceRoot, file.source, 'Source');
+  const localDestination = await resolvePathWithinRoot(git.workingDir, file.dest, 'Destination');
+  const fileExists = fs.existsSync(localSource);
   const destExists = fs.existsSync(localDestination);
   let isDirectory: boolean;
 
@@ -57,7 +68,7 @@ async function processFile(
       return;
     }
   } else {
-    isDirectory = await pathIsDirectory(file.source);
+    isDirectory = await pathIsDirectory(localSource);
 
     // For directories, `replace: false` should be handled file-by-file (skip overwriting existing files)
     if (!isDirectory && destExists && file.replace === false) {
@@ -65,7 +76,7 @@ async function processFile(
       return;
     }
 
-    const source = isDirectory ? addTrailingSlash(file.source) : file.source;
+    const source = isDirectory ? addTrailingSlash(localSource) : localSource;
     const dest = isDirectory ? addTrailingSlash(localDestination) : localDestination;
 
     if (isDirectory) {

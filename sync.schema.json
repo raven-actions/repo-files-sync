@@ -5,14 +5,7 @@
   "description": "Configuration schema for repo-files-sync GitHub Action sync.yml file",
   "type": "object",
   "additionalProperties": {
-    "oneOf": [
-      {
-        "$ref": "#/definitions/fileList"
-      },
-      {
-        "$ref": "#/definitions/groupWrapper"
-      }
-    ]
+    "$ref": "#/definitions/fileList"
   },
   "properties": {
     "group": {
@@ -55,7 +48,9 @@
     "fileConfigObject": {
       "type": "object",
       "description": "Detailed file synchronization configuration",
-      "required": ["source"],
+      "required": [
+        "source"
+      ],
       "additionalProperties": false,
       "properties": {
         "source": {
@@ -182,8 +177,10 @@
     },
     "groupWrapper": {
       "type": "object",
-      "description": "Wrapper object containing group configuration(s)",
-      "required": ["group"],
+      "description": "Deprecated wrapper definition retained for schema compatibility",
+      "required": [
+        "group"
+      ],
       "additionalProperties": false,
       "properties": {
         "group": {
@@ -277,15 +274,21 @@
             "owner/repo1",
             "owner/repo2"
           ],
-          "files": ["LICENSE"],
+          "files": [
+            "LICENSE"
+          ],
           "reviewers": [
             "reviewer1",
             "reviewer2"
           ]
         },
         {
-          "repos": ["owner/repo3"],
-          "files": [".gitignore"],
+          "repos": [
+            "owner/repo3"
+          ],
+          "files": [
+            ".gitignore"
+          ],
           "branchSuffix": "gitignore-update"
         }
       ]

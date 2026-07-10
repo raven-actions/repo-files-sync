@@ -34,7 +34,7 @@ export interface RepoConfig {
  * drift from what the action actually accepts.
  */
 export interface RawFileConfig {
-  source?: string;
+  source: string;
   dest?: string;
   template?: boolean | Record<string, unknown>;
   replace?: boolean;

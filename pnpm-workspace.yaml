@@ -2,6 +2,9 @@
 allowBuilds:
   esbuild: true
 
+overrides:
+  undici: 6.27.0
+
 # Delay adopting just-published versions to avoid pulling in broken or yanked
 # releases during install/update (including `pnpm up --latest`).
 # Value is in minutes; 4320 = 3 days.

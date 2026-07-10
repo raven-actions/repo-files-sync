@@ -5,7 +5,7 @@ import { throttling } from '@octokit/plugin-throttling';
 import * as path from 'path';
 
 import config from './config.js';
-import { dedent, execGit, remove } from './helpers.js';
+import { dedent, execGit, execGitBuffer, remove } from './helpers.js';
 
 import type { RepoInfo, TreeDiffEntry, GitDiffDict } from './types.js';
 
@@ -19,6 +19,8 @@ interface PullRequestInfo {
 // The concrete action taken on the pull request, so callers can report exactly
 // what happened instead of a generic "created/updated".
 type PrAction = 'created' | 'updated' | 'reopened';
+
+const BLOB_UPLOAD_CONCURRENCY = 4;
 
 interface PullRequestResult extends PullRequestInfo {
   action: PrAction;
@@ -94,19 +96,34 @@ export default class Git {
     this.github = octokit.rest;
   }
 
+  private static literalPathspec(file: string): string {
+    return `:(literal)${file.replace(/\\/g, '/')}`;
+  }
+
+  private branchRemote(): 'origin' | 'fork' {
+    return FORK ? 'fork' : 'origin';
+  }
+
+  private forceWithLeaseArg(branch: string): string {
+    return this.remoteBranchHead ?
+        `--force-with-lease=refs/heads/${branch}:${this.remoteBranchHead}`
+      : '--force-with-lease';
+  }
+
   private static toSafePathSegment(input: string): string {
     const trimmed = input.trim();
     if (!trimmed) return 'default';
     // Avoid path traversal and Windows-invalid characters while keeping it readable.
     // Intentionally avoid control-character regex ranges here to satisfy eslint no-control-regex.
     const sanitized = Array.from(trimmed, (ch) => {
-      const code = ch.codePointAt(0) ?? 0;
+      const code = ch.codePointAt(0)!;
       if (code < 0x20) return '_';
       if ('\\/<>:"|?*'.includes(ch)) return '_';
       return ch;
     }).join('');
 
-    return sanitized.replace(/\.+/g, '.');
+    const compact = sanitized.replace(/\.+/g, '.').replace(/[. ]+$/g, '');
+    return compact && compact !== '.' && compact !== '..' ? compact : 'default';
   }
 
   async initRepo(repo: RepoInfo, branchSuffix = ''): Promise<void> {
@@ -124,7 +141,13 @@ export default class Git {
     // Set values to current repo
     this.repo = repo;
     const suffixDir = Git.toSafePathSegment(branchSuffix);
-    this.workingDir = path.join(TMP_DIR, repo.uniqueName, suffixDir);
+    this.workingDir = path.join(
+      TMP_DIR,
+      Git.toSafePathSegment(repo.host),
+      Git.toSafePathSegment(repo.user),
+      Git.toSafePathSegment(`${repo.name}@${repo.branch}`),
+      suffixDir
+    );
     this.gitUrl = `https://${IS_INSTALLATION_TOKEN ? 'x-access-token:' : ''}${
       IS_FINE_GRAINED ? 'oauth:' : ''
     }${GITHUB_TOKEN}@${repo.fullName}.git`;
@@ -218,14 +241,17 @@ export default class Git {
 
     core.debug(`Switch/Create PR Branch ${newBranch}`);
 
+    const branchRemote = this.branchRemote();
+
     // Fetch all branches.
     // Use execGit (no shell) so the `*` refspec isn't mangled by cmd.exe on Windows
     // runners, where single quotes are not stripped.
-    await execGit(['remote', 'set-branches', 'origin', '*'], this.workingDir);
-    await execGit(['fetch', '-v', '--depth=1'], this.workingDir);
+    await execGit(['remote', 'set-branches', branchRemote, '*'], this.workingDir);
+    const fetchArgs = branchRemote === 'origin' ? ['fetch', '-v', '--depth=1'] : ['fetch', '-v', '--depth=1', branchRemote];
+    await execGit(fetchArgs, this.workingDir);
 
     try {
-      this.remoteBranchHead = await execGit(['rev-parse', '--verify', `origin/${newBranch}`], this.workingDir);
+      this.remoteBranchHead = await execGit(['rev-parse', '--verify', `${branchRemote}/${newBranch}`], this.workingDir);
     } catch {
       core.debug(`No existing remote branch for ${newBranch}`);
       this.remoteBranchHead = undefined;
@@ -262,26 +288,21 @@ export default class Git {
       core.info(`PR branch ${newBranch} is behind ${this.baseBranch}, rebasing onto the latest base`);
       await execGit(['switch', '-C', newBranch], this.workingDir);
       this.forceUpdateBranch = true;
+    } else if (this.remoteBranchHead) {
+      await execGit(['switch', '--track', '-c', newBranch, `${branchRemote}/${newBranch}`], this.workingDir);
     } else {
-      // Switch to the existing branch, or create it if it doesn't exist locally.
-      // Use execGit (no shell) instead of `2>/dev/null || ...`, which is POSIX-only
-      // and breaks on Windows runners (cmd.exe has no /dev/null).
-      try {
-        await execGit(['switch', newBranch], this.workingDir);
-      } catch {
-        await execGit(['switch', '-c', newBranch], this.workingDir);
-      }
+      await execGit(['switch', '-c', newBranch], this.workingDir);
     }
 
     await this.getLastCommitSha();
   }
 
   async add(file: string): Promise<string> {
-    return execGit(['add', '-f', file], this.workingDir);
+    return execGit(['add', '-f', '--', Git.literalPathspec(file)], this.workingDir);
   }
 
   async remove(file: string): Promise<string> {
-    return execGit(['rm', '-f', file], this.workingDir);
+    return execGit(['rm', '-r', '-f', '--', Git.literalPathspec(file)], this.workingDir);
   }
 
   async cleanupRepo(repo: RepoInfo, removeWorkingDir = true): Promise<void> {
@@ -369,7 +390,7 @@ export default class Git {
     if (source.endsWith('/')) {
       return Object.keys(this.lastCommitChanges)
         .filter((filePath) => filePath.startsWith(source))
-        .map((key) => this.lastCommitChanges?.[key] ?? '')
+        .map((key) => this.lastCommitChanges![key]!)
         .filter((diff) => diff !== '');
     }
 
@@ -395,7 +416,7 @@ export default class Git {
    * Gets array of git diffs for the destination, which can be a file or directory
    */
   async changes(destination: string): Promise<string[]> {
-    const output = await execGit(['diff', 'HEAD', destination], this.workingDir);
+    const output = await execGit(['diff', 'HEAD', '--', Git.literalPathspec(destination)], this.workingDir);
     return Object.values(this.parseGitDiffOutput(output));
   }
 
@@ -438,14 +459,30 @@ export default class Git {
   }
 
   async getTreeDiff(referenceTreeId: string, differenceTreeId: string): Promise<TreeDiffEntry[]> {
-    const output = await execGit(['diff-tree', referenceTreeId, differenceTreeId, '-r'], this.workingDir);
+    const output = await execGit(
+      ['diff-tree', '-r', '-z', '--no-commit-id', referenceTreeId, differenceTreeId],
+      this.workingDir,
+      false
+    );
+    const fields = output.split('\0');
+    const entries: TreeDiffEntry[] = [];
 
-    return output.split('\n').map((line) => {
-      const [newMode = '', previousMode = '', newBlob = '', previousBlob = '', change = '', filePath = ''] =
-        line.replace(/^:/, '').replace('\t', ' ').split(' ');
+    for (let index = 0; index + 1 < fields.length; index += 2) {
+      const metadata = fields[index];
+      const filePath = fields[index + 1];
 
-      return { newMode, previousMode, newBlob, previousBlob, change, path: filePath };
-    });
+      if (!metadata || filePath === undefined) {
+        continue;
+      }
+
+      const [newMode = '', previousMode = '', newBlob = '', previousBlob = '', change = ''] = metadata
+        .replace(/^:/, '')
+        .split(' ');
+
+      entries.push({ newMode, previousMode, newBlob, previousBlob, change, path: filePath });
+    }
+
+    return entries;
   }
 
   /**
@@ -454,12 +491,12 @@ export default class Git {
   async uploadGitHubBlob(blob: string): Promise<void> {
     core.debug(`Uploading GitHub Blob for blob ${blob}`);
 
-    const fileContent = await execGit(['cat-file', '-p', blob], this.workingDir, false);
+    const fileContent = await execGitBuffer(['cat-file', '-p', blob], this.workingDir);
 
     await this.github.git.createBlob({
       owner: this.repo.user,
       repo: this.repo.name,
-      content: Buffer.from(fileContent).toString('base64'),
+      content: fileContent.toString('base64'),
       encoding: 'base64'
     });
   }
@@ -571,30 +608,31 @@ export default class Git {
   }
 
   async push(): Promise<string | void> {
+    const targetBranch = SKIP_PR ? this.baseBranch : this.prBranch;
+
+    if (targetBranch) {
+      let currentRemoteHead: string | undefined;
+      const branchRemote = this.branchRemote();
+
+      try {
+        await execGit(['fetch', branchRemote, targetBranch], this.workingDir);
+        currentRemoteHead = await execGit(['rev-parse', '--verify', `${branchRemote}/${targetBranch}`], this.workingDir);
+      } catch (error) {
+        core.debug(`Remote branch check skipped: ${String(error)}`);
+      }
+
+      if (this.remoteBranchHead && currentRemoteHead && currentRemoteHead !== this.remoteBranchHead) {
+        throw new Error(`Remote branch ${targetBranch} changed since checkout; refusing to overwrite manual changes.`);
+      }
+    }
+
     // Reopen a closed PR *before* its branch is force-pushed/recreated below.
     // GitHub rejects changing a closed PR back to "open" once the head branch
     // has been force-pushed or recreated, so this must happen first.
     await this.maybeReopenClosedPr();
 
-    const targetBranch = SKIP_PR ? this.baseBranch : this.prBranch;
-
-    // In REBASE mode the PR branch is intentionally rewritten onto the latest
-    // base, so skip the manual-change guard (the force update is deliberate).
-    if (!FORK && targetBranch && !this.forceUpdateBranch) {
-      try {
-        await execGit(['fetch', 'origin', targetBranch], this.workingDir);
-        const currentRemoteHead = await execGit(['rev-parse', '--verify', `origin/${targetBranch}`], this.workingDir);
-
-        if (this.remoteBranchHead && currentRemoteHead !== this.remoteBranchHead) {
-          throw new Error(`Remote branch ${targetBranch} changed since checkout; refusing to overwrite manual changes.`);
-        }
-      } catch (error) {
-        core.debug(`Remote branch check skipped: ${String(error)}`);
-      }
-    }
-
     if (FORK) {
-      const forceArgs = this.forceUpdateBranch ? ['--force'] : [];
+      const forceArgs = this.forceUpdateBranch && this.prBranch ? [this.forceWithLeaseArg(this.prBranch)] : [];
       return execGit(['push', '-u', ...forceArgs, 'fork', this.prBranch ?? ''], this.workingDir);
     }
 
@@ -603,7 +641,10 @@ export default class Git {
     }
 
     if (this.forceUpdateBranch && this.prBranch) {
-      return execGit(['push', '--force', this.gitUrl, `HEAD:refs/heads/${this.prBranch}`], this.workingDir);
+      return execGit(
+        ['push', this.forceWithLeaseArg(this.prBranch), this.gitUrl, `HEAD:refs/heads/${this.prBranch}`],
+        this.workingDir
+      );
     }
 
     return execGit(['push', this.gitUrl], this.workingDir);
@@ -671,7 +712,7 @@ export default class Git {
       const { data } = await this.github.repos.compareCommits({
         owner: this.repo.user,
         repo: this.repo.name,
-        base: branch,
+        base: FORK ? `${FORK}:${branch}` : branch,
         head: this.baseBranch
       });
 
@@ -884,7 +925,15 @@ export default class Git {
       (e): e is TreeDiffEntry & { newBlob: string } => e.newMode !== '000000' && e.newBlob !== null
     );
 
-    await Promise.all(blobsToCreate.map((e) => this.uploadGitHubBlob(e.newBlob)));
+    const pendingBlobs = [...blobsToCreate];
+    const workers = Array.from({ length: Math.min(BLOB_UPLOAD_CONCURRENCY, pendingBlobs.length) }, async () => {
+      let entry = pendingBlobs.shift();
+      while (entry) {
+        await this.uploadGitHubBlob(entry.newBlob);
+        entry = pendingBlobs.shift();
+      }
+    });
+    await Promise.all(workers);
 
     core.debug('Creating a GitHub tree');
 

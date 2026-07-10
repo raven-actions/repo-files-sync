@@ -506,7 +506,9 @@ If `OVERWRITE_EXISTING_PR` is `true` (default), the action will try to reuse the
 If `OVERWRITE_EXISTING_PR` is `false`, the action will create a new branch for each run instead (timestamp suffix). This is useful when you want to keep previous sync PRs open, or avoid non-fast-forward push failures when the existing sync branch has been modified.
 
 > [!NOTE]
-> The action does not force-push. If the remote branch moved, the push can fail with a non-fast-forward error.
+> Normal updates do not force-push. `REBASE` and closed-PR recovery use
+> `--force-with-lease`, so the update fails instead of overwriting a branch that
+> moved after the action checked it out.
 
 ### Syncing branches
 
@@ -623,6 +625,9 @@ group:
 ```
 
 > **Note:** The key has to start with http to indicate that you want to use a custom host.
+> The target URL must use the same host as `GITHUB_SERVER_URL`; syncing across
+> different GitHub hosts is not supported because the action uses one token and
+> one GitHub API endpoint for the run.
 
 ### Different branch prefix
 

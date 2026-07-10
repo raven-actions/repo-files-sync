@@ -298,8 +298,8 @@ describe('config.ts - Configuration Parsing', () => {
     });
 
     it('should return undefined for undefined input', () => {
-      const text: string | undefined = undefined;
-      const result = text === undefined ? undefined : text.split('\n');
+      const splitPatterns = (text: string | undefined): string[] | undefined => text?.split('\n');
+      const result = splitPatterns(undefined);
 
       expect(result).toBeUndefined();
     });
