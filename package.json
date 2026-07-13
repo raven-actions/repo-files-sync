@@ -23,9 +23,9 @@
     "@octokit/plugin-rest-endpoint-methods": "^17.0.0",
     "@types/fs-extra": "^11.0.4",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^26.1.0",
+    "@types/node": "^26.1.1",
     "@types/nunjucks": "^3.2.6",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.10",
     "ajv": "^8.20.0",
     "esbuild": "^0.28.1",
     "eslint": "^10.6.0",
@@ -34,9 +34,9 @@
     "prettier": "^3.9.4",
     "prettier-plugin-multiline-arrays": "^4.1.10",
     "syncpack": "^15.3.2",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.62.1",
-    "vitest": "^4.1.9"
+    "typescript": "^7.0.2",
+    "typescript-eslint": "^8.63.0",
+    "vitest": "^4.1.10"
   },
   "files": [
     "dist/*",
