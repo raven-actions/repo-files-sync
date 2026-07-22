@@ -28,14 +28,14 @@
     "@vitest/coverage-v8": "^4.1.10",
     "ajv": "^8.20.0",
     "esbuild": "^0.28.1",
-    "eslint": "^10.6.0",
+    "eslint": "^10.7.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.7.0",
     "prettier": "^3.9.5",
     "prettier-plugin-multiline-arrays": "^4.1.10",
     "syncpack": "^15.3.2",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.63.0",
+    "typescript-eslint": "^8.64.0",
     "vitest": "^4.1.10"
   },
   "files": [
