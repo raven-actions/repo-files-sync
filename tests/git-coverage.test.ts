@@ -506,6 +506,28 @@ Binary files a/image.png and b/image.png differ`);
     );
   });
 
+  it('safely handles a non-Error value thrown while requesting reviewers, preserving it as cause', async () => {
+    const git = await initializedGit();
+    internals(git).existingPr = { number: 8, html_url: 'https://example/pull/8', body: 'body' };
+    mocks.api.pulls.requestReviewers.mockRejectedValueOnce('Server Error');
+
+    await expect(git.addPrReviewers(['bob'])).rejects.toMatchObject({
+      message: expect.stringMatching(/not collaborators.*Original error: Server Error/s),
+      cause: 'Server Error'
+    });
+  });
+
+  it('safely handles an undefined value thrown while requesting team reviewers', async () => {
+    const git = await initializedGit();
+    internals(git).existingPr = { number: 8, html_url: 'https://example/pull/8', body: 'body' };
+    mocks.api.pulls.requestReviewers.mockRejectedValueOnce(undefined);
+
+    await expect(git.addPrTeamReviewers(['platform'])).rejects.toMatchObject({
+      message: expect.stringMatching(/read org members\/teams.*Original error: undefined/s),
+      cause: undefined
+    });
+  });
+
   it('returns no changed-file markup without an existing pull request', async () => {
     const git = await initializedGit();
 

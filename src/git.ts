@@ -108,17 +108,22 @@ export default class Git {
    * permission needed to resolve teams/members) that are easy to misread as
    * a generic failure - see https://github.com/BetaHuhn/repo-file-sync-action/issues/355.
    * Append actionable guidance instead of surfacing the raw message alone.
+   *
+   * Builds a brand-new Error rather than mutating `error` in place: the
+   * caught value isn't guaranteed to be an Error (it could be a string,
+   * `null`, or anything else a dependency decides to throw), and mutating a
+   * shared error object risks confusing side effects if it's also
+   * logged/reused elsewhere. The original value is preserved as `cause`.
    */
   private static enrichReviewerError(error: unknown, kind: 'user' | 'team', reviewers: string[]): Error {
-    const err = error as Error;
     const requested = reviewers.join(', ');
     const hint =
       kind === 'team' ?
         `Failed to request team reviewer(s) "${requested}". This usually means the token can't resolve the team(s) as a repository collaborator: confirm the team has repository access, and that the token has permission to read org members/teams (classic PAT: read:org scope; fine-grained PAT/GitHub App: Members read-only permission).`
       : `Failed to request reviewer(s) "${requested}". This usually means one or more users are not collaborators on the target repository, or the token lacks permission to see them as such.`;
 
-    err.message = `${hint} Original error: ${err.message}`;
-    return err;
+    const originalMessage = error instanceof Error ? error.message : String(error);
+    return new Error(`${hint} Original error: ${originalMessage}`, { cause: error });
   }
 
   private branchRemote(): 'origin' | 'fork' {
