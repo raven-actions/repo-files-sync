@@ -821,20 +821,40 @@ group:
       raven-actions/drkmd.js
 ```
 
-## 🏗️ Project changes - fork vs source
+## 🏗️ Project changes - fork vs. source
 
-- Added `INLINE_CONFIG` input to supply the sync config inline (no `.github/sync.yml` required).
-- Added directory filtering via `include` (allowlist) and `exclude` (denylist) using glob patterns (`minimatch`).
-- Added global `DELETE_ORPHANED` default and extended `deleteOrphaned` to work for **single files** as well as directories.
-- Added group-level `reviewers` (overrides global `REVIEWERS`) and `branchSuffix` to support multiple independent sync PRs per target repo.
-- Templates: always inject a built-in `repo` object into the Nunjucks context (host/user/name/branch/url, etc.) for easier bulk templating.
-- Templates render through a hardened-by-default sandbox (`TEMPLATE_SANDBOX`) and a configurable `TEMPLATE_AUTOESCAPE` option.
-- Improved path/pattern normalization (accepts full paths and normalizes them relative to `source`; consistent `/` handling across OSes).
-- This action's own working directory (`TMP_DIR`) is automatically excluded from directory syncs when it falls inside the configured `source` (e.g. `source: ./`), instead of being copied into the destination.
-- The `FORK` workflow clones and fetches with full history instead of a shallow clone, avoiding `shallow update not allowed` failures when reconciling a diverged fork branch.
-- `GH_TOKEN` API calls automatically retry on transient GitHub server errors (`@octokit/plugin-retry`), in addition to the existing rate-limit handling.
-- `GIT_EMAIL`/`GIT_USERNAME` are validated up front and required when `GH_TOKEN` is a GitHub App installation token, instead of silently falling back to an invalid identity.
+This project started as a fork of [repo-file-sync-action](https://github.com/BetaHuhn/repo-file-sync-action) (v1.21.1) and has since diverged substantially - rewritten from JavaScript to TypeScript, with an expanded feature set, hardened security posture, and a full test suite. Summary of the differences:
+
+### New features
+
+- `INLINE_CONFIG` input to supply the sync config inline (no `.github/sync.yml` required).
+- `REPOS` input to limit a run to specific target repositories without editing the config.
+- `PR_TITLE` input for a custom pull request title (independent of `COMMIT_AS_PR_TITLE`).
+- `REBASE` input to keep an open sync PR rebased on the latest base branch, similar to Dependabot.
+- `include` glob patterns (allowlist) for directory syncs, in addition to the original's `exclude` (denylist).
+- Global `DELETE_ORPHANED` default, and `deleteOrphaned` now also works for **single files** (the original only supported directories).
+- Group-level `reviewers` (overrides the global `REVIEWERS`) and `branchSuffix`, so the same target repo can receive multiple independent sync PRs.
+- `TEMPLATE_SANDBOX` (best-effort hardening against Nunjucks template-injection escapes, on by default) and `TEMPLATE_AUTOESCAPE` (toggle HTML-entity escaping for non-HTML templated files) inputs.
+- Always injects a built-in `repo` object (host/user/name/branch/url, etc.) into the Nunjucks template context for easier bulk templating.
+
+### Changed behavior
+
+- A single `GH_TOKEN` input replaces the original's `GH_PAT` / `GH_INSTALLATION_TOKEN` / `IS_FINE_GRAINED` inputs; the token type (classic PAT, fine-grained PAT, or GitHub App installation token) is auto-detected from its prefix instead of being manually flagged.
+- `GIT_EMAIL`/`GIT_USERNAME` are validated up front and required when using an installation token, instead of silently falling back to an invalid/empty identity.
+- Only exact, immutable version tags (e.g. `v1.0.0`) are published - no mutable `latest`/`v1` floating tags to pin to (the original updates a `latest`/`v1` tag on every release).
+- `exclude`/`include` accept full paths and are normalized relative to `source` (consistent `/` handling across OSes), and are respected by `deleteOrphaned` so excluded files are never removed.
 - Reviewer/team-reviewer request failures are re-raised with actionable guidance (e.g. missing collaborator/permission hints) instead of GitHub's terse API error alone.
+- The `FORK` workflow clones and fetches with full history instead of a shallow clone, avoiding `shallow update not allowed` failures when reconciling a diverged fork branch.
+- This action's own working directory (`TMP_DIR`) is automatically excluded from directory syncs when it falls inside the configured `source` (e.g. `source: ./`), instead of risking being copied into the destination.
+- A previously closed sync PR is reopened and its branch rebuilt, instead of being left closed with a stale/orphaned branch.
+- A target repo whose default branch has no commits yet is skipped with a warning instead of failing the whole run.
+- Non-fast-forward pushes use `--force-with-lease` instead of a plain force push, so a manually-modified sync branch is never silently clobbered.
+- `GH_TOKEN` API calls automatically retry on transient GitHub server errors, in addition to the existing rate-limit throttling.
+
+### Security & reliability hardening
+
+- Source/destination paths are validated against path traversal, absolute paths, symlink escapes, and Git metadata (`.git`) targeting.
+- All `git` commands run via `execFile` (no shell interpolation); `add`/`rm` use literal pathspecs and `clone` uses `--` before positional arguments to prevent argument/pathspec injection.
 
 ## 👥 Contributing
 
