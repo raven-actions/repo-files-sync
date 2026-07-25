@@ -154,6 +154,16 @@ inputs:
       Specify the user account for a fork and pull-request workflow.
       Defaults to false.
     required: false
+  TEMPLATE_SANDBOX:
+    description: |
+      Harden Nunjucks template rendering (files using `template`) against the
+      common property-access chains (e.g. `constructor`, `__proto__`) used to
+      escalate template syntax into arbitrary JavaScript execution.
+      This is a best-effort mitigation, not a full sandbox - only enable
+      `template` on files from fully trusted sources regardless of this setting.
+      Set to false to disable; a warning is logged every run while disabled.
+      Defaults to true.
+    required: false
 
 outputs:
   pull_request_urls:

@@ -893,4 +893,25 @@ describe('config.ts - context initialization', () => {
     expect(config.default.DELETE_ORPHANED).toBe(true);
     expect(parsed[0]?.files[0]?.deleteOrphaned).toBe(true);
   });
+
+  it('should default TEMPLATE_SANDBOX to true when not set', async () => {
+    mockInputs['GH_TOKEN'] = 'token';
+    mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
+    mockFileContents['.github/sync.yml'] = 'user/repo:\n  - file.txt';
+
+    const config = await import('../src/config.js');
+
+    expect(config.default.TEMPLATE_SANDBOX).toBe(true);
+  });
+
+  it('should allow disabling TEMPLATE_SANDBOX via input', async () => {
+    mockInputs['GH_TOKEN'] = 'token';
+    mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
+    mockInputs['TEMPLATE_SANDBOX'] = 'false';
+    mockFileContents['.github/sync.yml'] = 'user/repo:\n  - file.txt';
+
+    const config = await import('../src/config.js');
+
+    expect(config.default.TEMPLATE_SANDBOX).toBe(false);
+  });
 });

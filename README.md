@@ -30,7 +30,7 @@ With [repo-files-sync](https://github.com/raven-actions/repo-files-sync) you can
 - Request reviews globally or per group (users and teams)
 - Sync using a GitHub App installation token (GitHub-verified commits)
 - Optional fork-based workflow (push to forks, open PRs upstream)
-- Render [Jinja](https://jinja.palletsprojects.com/)-style templates and use variables thanks to [Nunjucks](https://mozilla.github.io/nunjucks/)
+- Render [Jinja](https://jinja.palletsprojects.com/)-style templates and use variables thanks to [Nunjucks](https://mozilla.github.io/nunjucks/), with best-effort sandboxing against template-injection escapes enabled by default
 
 ## 📚 Usage
 
@@ -159,6 +159,7 @@ Here are all the inputs [repo-files-sync](https://github.com/raven-actions/repo-
 | `SKIP_PR`               | Skips creating a Pull Request and pushes directly to the default branch                                                                                                                                         | **No**                                 | false                          |
 | `DELETE_ORPHANED`       | Global default for deleting orphaned files in target repositories (used when file-level `deleteOrphaned` is not set)                                                                                            | **No**                                 | false                          |
 | `FORK`                  | A Github account username. Changes will be pushed to a fork of target repos on this account.                                                                                                                    | **No**                                 | false                          |
+| `TEMPLATE_SANDBOX`      | Harden Nunjucks template rendering against common `constructor`/`__proto__` template-injection escapes. Best-effort, not a full sandbox - see [Using templates](#using-templates). Logs a warning every run when disabled | **No**                                 | true                           |
 
 ### Input behavior notes
 
@@ -166,6 +167,7 @@ Here are all the inputs [repo-files-sync](https://github.com/raven-actions/repo-
 - `SKIP_PR: true` pushes changes directly to the target repo's default branch (no PR).
 - `SKIP_CLEANUP: true` keeps the working directory (`TMP_DIR`) on the runner for debugging.
 - `REBASE: true` keeps an open sync PR rebased on the latest base branch, similar to [Dependabot's rebase](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/managing-pull-requests-for-dependency-updates#managing-dependabot-pull-requests-with-comment-commands). When the PR branch is behind the base branch it is rebuilt on top of the latest base and force-pushed, so any commits pushed manually to the sync branch are discarded. Requires `OVERWRITE_EXISTING_PR` (the default) and has no effect with `SKIP_PR`.
+- `TEMPLATE_SANDBOX: false` disables the template rendering hardening described in [Using templates](#using-templates) and logs a warning on every run while it is disabled.
 
 ### Outputs
 
@@ -360,7 +362,9 @@ This is some content
 
 > [!WARNING]
 >
-> Nunjucks [does not sandbox template execution](https://mozilla.github.io/nunjucks/api.html#user-defined-templates-warning). Only enable `template` for source files whose full content you trust (e.g. files you and your reviewed collaborators maintain). Rendering a file that contains attacker-controlled template syntax runs arbitrary Nunjucks/JavaScript logic inside the Action, which can expose the `GH_TOKEN` or other runner secrets. Do not enable `template` on files that accept unreviewed external contributions (e.g. auto-generated content from untrusted issues/PRs).
+> Nunjucks [does not sandbox template execution](https://mozilla.github.io/nunjucks/api.html#user-defined-templates-warning) itself, so by default this action hardens rendering against the most common escape technique: property-access chains like `{{ "".constructor.constructor("...")() }}` or `{{ range.constructor("...")() }}` that reach a JavaScript constructor. `constructor`, `__proto__`, `prototype`, and the legacy `__defineGetter__`/`__defineSetter__`/`__lookupGetter__`/`__lookupSetter__` accessors resolve to `undefined` while rendering instead.
+>
+> This is a **best-effort mitigation, not a full sandbox** - it doesn't limit the CPU/memory a runaway template can use, and a sufficiently creative payload may still find another way to misbehave. Only ever enable `template` for source files whose full content you trust (e.g. files you and your reviewed collaborators maintain); never enable it on files that accept unreviewed external contributions. You can disable this hardening entirely with the `TEMPLATE_SANDBOX: false` action input, but doing so is not recommended and logs a warning on every run.
 
 #### Built-in template variables
 

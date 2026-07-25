@@ -43,6 +43,76 @@ export async function readFilesRecursive(dir: string, includeHidden = false): Pr
 // Configure nunjucks
 nunjucks.configure({ autoescape: true, trimBlocks: true, lstripBlocks: true });
 
+// --- Template execution sandbox --------------------------------------------
+//
+// Nunjucks explicitly does not sandbox template execution (see its own
+// "User-Defined Templates Warning":
+// https://mozilla.github.io/nunjucks/api.html#user-defined-templates-warning).
+// The standard way template syntax escalates into arbitrary JavaScript
+// execution is a property-access chain that reaches a constructor, e.g.
+// `{{ "".constructor.constructor("<code>")() }}` or
+// `{{ range.constructor("<code>")() }}`.
+//
+// Every `.attr` and `[expr]` access a compiled Nunjucks template can perform -
+// on any object, including string/array/number literals - is compiled down to
+// a call to a single runtime function, `memberLookup`
+// (nunjucks/src/runtime.js). That function is passed by reference into every
+// compiled template's root render function (nunjucks/src/environment.js), and
+// `nunjucks.runtime` is that exact same module-level object, so patching the
+// property here blocks the chain for every template rendered anywhere in this
+// process, regardless of which Environment/context renders it.
+//
+// This is a best-effort mitigation, not a full sandbox: it does not limit the
+// CPU/memory usage of a runaway template, and it relies on an internal (but
+// verified against the pinned nunjucks version) entry point rather than a
+// documented public API, since Nunjucks does not expose one for this. Only
+// ever enable `template` on files whose full content you trust, regardless of
+// this setting - see the README's "Using templates" section and SECURITY.md.
+type MemberLookup = (obj: unknown, key: unknown) => unknown;
+
+interface NunjucksRuntimeInternals {
+  memberLookup: MemberLookup;
+}
+
+const FORBIDDEN_TEMPLATE_KEYS = new Set([
+  'constructor',
+  'prototype',
+  '__proto__',
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__'
+]);
+
+let originalMemberLookup: MemberLookup | undefined;
+
+/**
+ * Enable or disable the template execution sandbox described above. Blocks
+ * property-access chains that reach `constructor`/`__proto__`/`prototype`
+ * (and the legacy dunder accessor methods) while templates render, so that
+ * e.g. `{{ "".constructor.constructor("...")() }}` resolves to `undefined`
+ * instead of the `Function` constructor.
+ *
+ * Applies process-wide (Nunjucks shares one runtime module across every
+ * Environment) and is idempotent - safe to call repeatedly/in any order.
+ * @internal Exported for testing
+ */
+export function configureTemplateSandbox(enabled: boolean): void {
+  const runtimeModule = (nunjucks as unknown as { runtime: NunjucksRuntimeInternals }).runtime;
+
+  originalMemberLookup ??= runtimeModule.memberLookup;
+  const baseline = originalMemberLookup;
+
+  runtimeModule.memberLookup = enabled ?
+    (obj: unknown, key: unknown): unknown => {
+      if (typeof key === 'string' && FORBIDDEN_TEMPLATE_KEYS.has(key)) {
+        return undefined;
+      }
+      return baseline(obj, key);
+    }
+  : baseline;
+}
+
 /**
  * Async forEach utility - processes array items sequentially
  * From https://github.com/toniov/p-iteration/blob/master/lib/static-methods.js - MIT © Antonio V

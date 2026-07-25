@@ -10,7 +10,8 @@ import {
   resolvePathWithinRoot,
   copy,
   remove,
-  arrayEquals
+  arrayEquals,
+  configureTemplateSandbox
 } from './helpers.js';
 import { parseConfig, default as config } from './config.js';
 
@@ -31,7 +32,8 @@ const {
   COMMIT_AS_PR_TITLE,
   FORK,
   REVIEWERS,
-  TEAM_REVIEWERS
+  TEAM_REVIEWERS,
+  TEMPLATE_SANDBOX
 } = config;
 
 /**
@@ -306,6 +308,18 @@ async function processRepo(git: Git, item: RepoConfig): Promise<string | undefin
  * Main entry point
  */
 async function run(): Promise<void> {
+  // Harden Nunjucks template rendering before any file is processed. This is a
+  // best-effort mitigation (see helpers.ts), not a full sandbox, so surface a
+  // clear, always-on warning whenever it has been explicitly turned off.
+  configureTemplateSandbox(TEMPLATE_SANDBOX);
+  if (!TEMPLATE_SANDBOX) {
+    core.warning(
+      'TEMPLATE_SANDBOX is disabled: files synced with `template` are rendered without hardening against ' +
+        'template-injection escapes (e.g. `constructor`/`__proto__` property chains). Only use `template` on ' +
+        'files from fully trusted sources.'
+    );
+  }
+
   // Reuse octokit for each repo
   const git = new Git();
 

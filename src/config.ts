@@ -62,7 +62,8 @@ function initializeContext(): ConfigContext {
     COMMIT_AS_PR_TITLE: getBooleanInput('COMMIT_AS_PR_TITLE', false),
     DELETE_ORPHANED: getBooleanInput('DELETE_ORPHANED', false),
     BRANCH_PREFIX: getOptionalInput('BRANCH_PREFIX', 'repo-sync/SOURCE_REPO_NAME'),
-    FORK: getDisableableInput('FORK', false)
+    FORK: getDisableableInput('FORK', false),
+    TEMPLATE_SANDBOX: getBooleanInput('TEMPLATE_SANDBOX', true)
   };
 
   core.setSecret(context.GITHUB_TOKEN);
