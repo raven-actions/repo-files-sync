@@ -194,7 +194,13 @@ export default class Git {
 
     const branchArgs = this.repo.branch !== 'default' ? ['--branch', this.repo.branch] : [];
 
-    return execGit(['clone', '--depth', '1', ...branchArgs, this.gitUrl, this.workingDir]);
+    // `--` stops option parsing before the positional <repository> and
+    // <directory> arguments (both documented as `git clone [--] <repository>
+    // [<directory>]`). this.workingDir is derived from the TMP_DIR action
+    // input, so without this guard a value starting with `-` (e.g.
+    // `--upload-pack=...`) could be misread as a git option instead of the
+    // destination path.
+    return execGit(['clone', '--depth', '1', ...branchArgs, '--', this.gitUrl, this.workingDir]);
   }
 
   async setIdentity(): Promise<string> {
@@ -365,7 +371,11 @@ export default class Git {
           filePath = prevHeaderLine.slice(6); // remove '--- a/'
         }
 
-        return { ...resultDict, [filePath]: plainDiff };
+        // Mutate the accumulator in place instead of spreading it into a new
+        // object on every iteration - spreading here made parsing O(n^2) in
+        // the number of changed files, which gets slow on large diffs.
+        resultDict[filePath] = plainDiff;
+        return resultDict;
       }, {});
   }
 

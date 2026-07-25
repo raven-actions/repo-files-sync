@@ -358,6 +358,10 @@ This is some content
 {% endblock %}
 ```
 
+> [!WARNING]
+>
+> Nunjucks [does not sandbox template execution](https://mozilla.github.io/nunjucks/api.html#user-defined-templates-warning). Only enable `template` for source files whose full content you trust (e.g. files you and your reviewed collaborators maintain). Rendering a file that contains attacker-controlled template syntax runs arbitrary Nunjucks/JavaScript logic inside the Action, which can expose the `GH_TOKEN` or other runner secrets. Do not enable `template` on files that accept unreviewed external contributions (e.g. auto-generated content from untrusted issues/PRs).
+
 #### Built-in template variables
 
 Every Nunjucks template context automatically includes a `repo` object with information about the target repository:
