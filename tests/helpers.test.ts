@@ -127,6 +127,29 @@ describe('helpers.ts', () => {
       expect(filter(path.join(root, 'src', 'index.js'))).toBe(true);
     });
 
+    it('should stop traversal into a directory that matches an exclude pattern', async () => {
+      const root = path.join(testDir, 'directory-exclude-stops-traversal');
+      const excludedDir = path.join(root, 'node_modules');
+      await fs.ensureDir(excludedDir);
+
+      const filter = createFilterFunc(root, ['node_modules'], undefined);
+
+      // Previously directories always returned true (so fs.copy would still
+      // traverse into - and create an empty - excluded directory); now an
+      // exclude match on the directory's own path prunes the whole subtree.
+      expect(filter(excludedDir)).toBe(false);
+    });
+
+    it('should still traverse into a non-excluded directory so included files deeper down can match', async () => {
+      const root = path.join(testDir, 'directory-traversal-continues');
+      const srcDir = path.join(root, 'src');
+      await fs.ensureDir(srcDir);
+
+      const filter = createFilterFunc(root, undefined, ['**/*.yml']);
+
+      expect(filter(srcDir)).toBe(true);
+    });
+
     it('should filter an in-root filename that begins with two dots', () => {
       const root = path.join(testDir, 'dot-prefix');
       const filter = createFilterFunc(root, ['..debug.log'], undefined);
@@ -727,5 +750,27 @@ describe('helpers.ts - readFilesRecursive', () => {
 
     expect(files).toContain('target/target.txt');
     expect(files).toContain('link');
+  });
+
+  it('should skip entries inside an excluded absolute path', async () => {
+    const excludedDir = path.join(tempDir, 'tmp-working-dir');
+    await fs.ensureDir(path.join(excludedDir, 'nested'));
+    await fs.writeFile(path.join(tempDir, 'keep.txt'), 'keep');
+    await fs.writeFile(path.join(excludedDir, 'skip.txt'), 'skip');
+    await fs.writeFile(path.join(excludedDir, 'nested', 'deep.txt'), 'skip too');
+
+    const files = await readFilesRecursive(tempDir, true, [excludedDir]);
+
+    expect(files).toEqual(['keep.txt']);
+  });
+
+  it('should skip an excluded absolute path that is itself a file', async () => {
+    const excludedFile = path.join(tempDir, 'secret.txt');
+    await fs.writeFile(path.join(tempDir, 'keep.txt'), 'keep');
+    await fs.writeFile(excludedFile, 'secret');
+
+    const files = await readFilesRecursive(tempDir, true, [excludedFile]);
+
+    expect(files).toEqual(['keep.txt']);
   });
 });
