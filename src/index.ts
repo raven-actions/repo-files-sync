@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import * as fs from 'fs';
+import * as path from 'path';
 
 import Git from './git.js';
 import {
@@ -8,9 +9,12 @@ import {
   addTrailingSlash,
   pathIsDirectory,
   resolvePathWithinRoot,
+  isPathWithinRoot,
   copy,
   remove,
-  arrayEquals
+  arrayEquals,
+  configureTemplateSandbox,
+  configureTemplateAutoescape
 } from './helpers.js';
 import { parseConfig, default as config } from './config.js';
 
@@ -31,8 +35,29 @@ const {
   COMMIT_AS_PR_TITLE,
   FORK,
   REVIEWERS,
-  TEAM_REVIEWERS
+  TEAM_REVIEWERS,
+  TEMPLATE_SANDBOX,
+  TEMPLATE_AUTOESCAPE
 } = config;
+
+/**
+ * Resolve this action's own TMP_DIR working directory and return it as a
+ * one-item list when it falls inside the given directory sync's source (e.g.
+ * `source: ./` at the repo root, combined with the default relative
+ * TMP_DIR), otherwise an empty list. Passed to `copy()`'s
+ * `excludeAbsolutePaths`, which both prevents it from being traversed/copied
+ * (an in-progress clone of a target repo - including other target repos'
+ * working directories from the same run - would otherwise be copied into a
+ * destination) and avoids fs-extra's "Cannot copy X to a subdirectory of
+ * itself" guard, since the destination necessarily also lives inside TMP_DIR
+ * whenever TMP_DIR falls inside the source. See
+ * https://github.com/BetaHuhn/repo-file-sync-action/issues/348 and
+ * https://github.com/BetaHuhn/repo-file-sync-action/issues/322.
+ */
+function excludedWorkingDirs(localSource: string): string[] {
+  const tmpDirAbsolute = path.resolve(TMP_DIR);
+  return isPathWithinRoot(localSource, tmpDirAbsolute) ? [tmpDirAbsolute] : [];
+}
 
 /**
  * Process a single file sync operation
@@ -83,7 +108,7 @@ async function processFile(
       core.info('Source is directory');
     }
 
-    await copy(source, dest, isDirectory, file, item);
+    await copy(source, dest, isDirectory, file, item, isDirectory ? excludedWorkingDirs(localSource) : []);
     await git.add(file.dest);
   }
 
@@ -306,6 +331,19 @@ async function processRepo(git: Git, item: RepoConfig): Promise<string | undefin
  * Main entry point
  */
 async function run(): Promise<void> {
+  // Harden Nunjucks template rendering before any file is processed. This is a
+  // best-effort mitigation (see helpers.ts), not a full sandbox, so surface a
+  // clear, always-on warning whenever it has been explicitly turned off.
+  configureTemplateSandbox(TEMPLATE_SANDBOX);
+  if (!TEMPLATE_SANDBOX) {
+    core.warning(
+      'TEMPLATE_SANDBOX is disabled: files synced with `template` are rendered without hardening against ' +
+        'template-injection escapes (e.g. `constructor`/`__proto__` property chains). Only use `template` on ' +
+        'files from fully trusted sources.'
+    );
+  }
+  configureTemplateAutoescape(TEMPLATE_AUTOESCAPE);
+
   // Reuse octokit for each repo
   const git = new Git();
 

@@ -138,6 +138,8 @@ export interface ConfigContext {
   DELETE_ORPHANED: boolean;
   BRANCH_PREFIX: string;
   FORK: string | false | undefined;
+  TEMPLATE_SANDBOX: boolean;
+  TEMPLATE_AUTOESCAPE: boolean;
 }
 
 // Helper function callback types

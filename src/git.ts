@@ -2,6 +2,7 @@ import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { GitHub, getOctokitOptions } from '@actions/github/lib/utils';
 import { throttling } from '@octokit/plugin-throttling';
+import { retry } from '@octokit/plugin-retry';
 import * as path from 'path';
 
 import config from './config.js';
@@ -74,9 +75,10 @@ export default class Git {
   public workingDir!: string;
 
   constructor() {
-    // Cast throttling to handle version mismatch between @actions/github and @octokit/plugin-throttling
+    // Cast throttling/retry to handle version mismatches between @actions/github's
+    // bundled Octokit types and these standalone plugin packages.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const Octokit = GitHub.plugin(throttling as any);
+    const Octokit = GitHub.plugin(throttling as any, retry as any);
 
     const options = getOctokitOptions(GITHUB_TOKEN, {
       baseUrl: process.env['GITHUB_API_URL'] || 'https://api.github.com',
@@ -98,6 +100,30 @@ export default class Git {
 
   private static literalPathspec(file: string): string {
     return `:(literal)${file.replace(/\\/g, '/')}`;
+  }
+
+  /**
+   * GitHub's "request reviewers" API returns terse errors when a user/team
+   * can't be requested (e.g. not a collaborator, or the token lacks the
+   * permission needed to resolve teams/members) that are easy to misread as
+   * a generic failure - see https://github.com/BetaHuhn/repo-file-sync-action/issues/355.
+   * Append actionable guidance instead of surfacing the raw message alone.
+   *
+   * Builds a brand-new Error rather than mutating `error` in place: the
+   * caught value isn't guaranteed to be an Error (it could be a string,
+   * `null`, or anything else a dependency decides to throw), and mutating a
+   * shared error object risks confusing side effects if it's also
+   * logged/reused elsewhere. The original value is preserved as `cause`.
+   */
+  private static enrichReviewerError(error: unknown, kind: 'user' | 'team', reviewers: string[]): Error {
+    const requested = reviewers.join(', ');
+    const hint =
+      kind === 'team' ?
+        `Failed to request team reviewer(s) "${requested}". This usually means the token can't resolve the team(s) as a repository collaborator: confirm the team has repository access, and that the token has permission to read org members/teams (classic PAT: read:org scope; fine-grained PAT/GitHub App: Members read-only permission).`
+      : `Failed to request reviewer(s) "${requested}". This usually means one or more users are not collaborators on the target repository, or the token lacks permission to see them as such.`;
+
+    const originalMessage = error instanceof Error ? error.message : String(error);
+    return new Error(`${hint} Original error: ${originalMessage}`, { cause: error });
   }
 
   private branchRemote(): 'origin' | 'fork' {
@@ -194,7 +220,22 @@ export default class Git {
 
     const branchArgs = this.repo.branch !== 'default' ? ['--branch', this.repo.branch] : [];
 
-    return execGit(['clone', '--depth', '1', ...branchArgs, this.gitUrl, this.workingDir]);
+    // The FORK workflow later has to reconcile this clone's history against a
+    // separate, potentially-diverged fork remote (e.g. after an upstream PR
+    // merges and the fork falls behind). Doing that against a shallow (depth
+    // 1) history is what causes git's "shallow update not allowed" error, so
+    // clone with full history whenever FORK is set; non-fork syncs keep the
+    // cheaper shallow clone. See
+    // https://github.com/BetaHuhn/repo-file-sync-action/issues/270.
+    const depthArgs = FORK ? [] : ['--depth', '1'];
+
+    // `--` stops option parsing before the positional <repository> and
+    // <directory> arguments (both documented as `git clone [--] <repository>
+    // [<directory>]`). this.workingDir is derived from the TMP_DIR action
+    // input, so without this guard a value starting with `-` (e.g.
+    // `--upload-pack=...`) could be misread as a git option instead of the
+    // destination path.
+    return execGit(['clone', ...depthArgs, ...branchArgs, '--', this.gitUrl, this.workingDir]);
   }
 
   async setIdentity(): Promise<string> {
@@ -247,7 +288,11 @@ export default class Git {
     // Use execGit (no shell) so the `*` refspec isn't mangled by cmd.exe on Windows
     // runners, where single quotes are not stripped.
     await execGit(['remote', 'set-branches', branchRemote, '*'], this.workingDir);
-    const fetchArgs = branchRemote === 'origin' ? ['fetch', '-v', '--depth=1'] : ['fetch', '-v', '--depth=1', branchRemote];
+    // The fork remote's branch may have diverged from origin's history (e.g.
+    // after an upstream PR merges), so fetching it shallow can hit "shallow
+    // update not allowed". The local clone already has full history in that
+    // case (see clone()), so only origin's own fetch stays shallow.
+    const fetchArgs = branchRemote === 'origin' ? ['fetch', '-v', '--depth=1'] : ['fetch', '-v', branchRemote];
     await execGit(fetchArgs, this.workingDir);
 
     try {
@@ -365,7 +410,11 @@ export default class Git {
           filePath = prevHeaderLine.slice(6); // remove '--- a/'
         }
 
-        return { ...resultDict, [filePath]: plainDiff };
+        // Mutate the accumulator in place instead of spreading it into a new
+        // object on every iteration - spreading here made parsing O(n^2) in
+        // the number of changed files, which gets slow on large diffs.
+        resultDict[filePath] = plainDiff;
+        return resultDict;
       }, {});
   }
 
@@ -887,23 +936,31 @@ export default class Git {
   async addPrReviewers(reviewers: string[]): Promise<void> {
     if (!this.existingPr) return;
 
-    await this.github.pulls.requestReviewers({
-      owner: this.repo.user,
-      repo: this.repo.name,
-      pull_number: this.existingPr.number,
-      reviewers
-    });
+    try {
+      await this.github.pulls.requestReviewers({
+        owner: this.repo.user,
+        repo: this.repo.name,
+        pull_number: this.existingPr.number,
+        reviewers
+      });
+    } catch (error) {
+      throw Git.enrichReviewerError(error, 'user', reviewers);
+    }
   }
 
   async addPrTeamReviewers(reviewers: string[]): Promise<void> {
     if (!this.existingPr) return;
 
-    await this.github.pulls.requestReviewers({
-      owner: this.repo.user,
-      repo: this.repo.name,
-      pull_number: this.existingPr.number,
-      team_reviewers: reviewers
-    });
+    try {
+      await this.github.pulls.requestReviewers({
+        owner: this.repo.user,
+        repo: this.repo.name,
+        pull_number: this.existingPr.number,
+        team_reviewers: reviewers
+      });
+    } catch (error) {
+      throw Git.enrichReviewerError(error, 'team', reviewers);
+    }
   }
 
   async createGithubCommit(commitSha: string): Promise<void> {

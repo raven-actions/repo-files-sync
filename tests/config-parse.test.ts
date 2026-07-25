@@ -743,6 +743,39 @@ describe('config.ts - context initialization', () => {
     }
   });
 
+  it('should fail initialization when using an installation token without GIT_EMAIL/GIT_USERNAME', async () => {
+    mockInputs['GH_TOKEN'] = 'ghs_installation-token';
+    mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit(1)');
+    }) as typeof process.exit);
+
+    try {
+      await expect(import('../src/config.js')).rejects.toThrow('process.exit(1)');
+      expect(core.setFailed).toHaveBeenCalledWith(
+        'GIT_EMAIL and GIT_USERNAME are required when GH_TOKEN is a GitHub App installation token (prefix `ghs_`).'
+      );
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    } finally {
+      exitSpy.mockRestore();
+    }
+  });
+
+  it('should initialize an installation token when GIT_EMAIL/GIT_USERNAME are provided', async () => {
+    mockInputs['GH_TOKEN'] = 'ghs_installation-token';
+    mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
+    mockInputs['GIT_EMAIL'] = 'bot@example.com';
+    mockInputs['GIT_USERNAME'] = 'sync-bot';
+    mockFileContents['.github/sync.yml'] = 'user/repo:\n  - file.txt';
+
+    const config = await import('../src/config.js');
+
+    expect(config.default.IS_INSTALLATION_TOKEN).toBe(true);
+    expect(config.default.GIT_EMAIL).toBe('bot@example.com');
+    expect(config.default.GIT_USERNAME).toBe('sync-bot');
+  });
+
   it('should use the public GitHub URL when GITHUB_SERVER_URL is absent', async () => {
     mockInputs['GH_TOKEN'] = 'token';
     delete process.env['GITHUB_SERVER_URL'];
@@ -804,6 +837,8 @@ describe('config.ts - context initialization', () => {
   it('should detect an installation token from the ghs_ prefix', async () => {
     mockInputs['GH_TOKEN'] = 'ghs_my-installation-token';
     mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
+    mockInputs['GIT_EMAIL'] = 'bot@example.com';
+    mockInputs['GIT_USERNAME'] = 'sync-bot';
     mockFileContents['.github/sync.yml'] = 'user/repo:\n  - file.txt';
 
     const config = await import('../src/config.js');
@@ -892,5 +927,47 @@ describe('config.ts - context initialization', () => {
 
     expect(config.default.DELETE_ORPHANED).toBe(true);
     expect(parsed[0]?.files[0]?.deleteOrphaned).toBe(true);
+  });
+
+  it('should default TEMPLATE_SANDBOX to true when not set', async () => {
+    mockInputs['GH_TOKEN'] = 'token';
+    mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
+    mockFileContents['.github/sync.yml'] = 'user/repo:\n  - file.txt';
+
+    const config = await import('../src/config.js');
+
+    expect(config.default.TEMPLATE_SANDBOX).toBe(true);
+  });
+
+  it('should allow disabling TEMPLATE_SANDBOX via input', async () => {
+    mockInputs['GH_TOKEN'] = 'token';
+    mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
+    mockInputs['TEMPLATE_SANDBOX'] = 'false';
+    mockFileContents['.github/sync.yml'] = 'user/repo:\n  - file.txt';
+
+    const config = await import('../src/config.js');
+
+    expect(config.default.TEMPLATE_SANDBOX).toBe(false);
+  });
+
+  it('should default TEMPLATE_AUTOESCAPE to true when not set', async () => {
+    mockInputs['GH_TOKEN'] = 'token';
+    mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
+    mockFileContents['.github/sync.yml'] = 'user/repo:\n  - file.txt';
+
+    const config = await import('../src/config.js');
+
+    expect(config.default.TEMPLATE_AUTOESCAPE).toBe(true);
+  });
+
+  it('should allow disabling TEMPLATE_AUTOESCAPE via input', async () => {
+    mockInputs['GH_TOKEN'] = 'token';
+    mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
+    mockInputs['TEMPLATE_AUTOESCAPE'] = 'false';
+    mockFileContents['.github/sync.yml'] = 'user/repo:\n  - file.txt';
+
+    const config = await import('../src/config.js');
+
+    expect(config.default.TEMPLATE_AUTOESCAPE).toBe(false);
   });
 });

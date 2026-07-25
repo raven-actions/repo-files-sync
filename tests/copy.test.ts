@@ -802,6 +802,8 @@ describe('helpers.ts - copy and write functions', () => {
         expect(await fs.pathExists(path.join(destSubDir, 'keep.txt'))).toBe(true);
         expect(await fs.pathExists(path.join(destSubDir, 'subdir', 'file1.txt'))).toBe(false);
         expect(await fs.pathExists(path.join(destSubDir, 'subdir', 'file2.txt'))).toBe(false);
+        // The excluded directory itself should not be traversed/created either
+        expect(await fs.pathExists(path.join(destSubDir, 'subdir'))).toBe(false);
       });
 
       it.skipIf(process.platform === 'win32')('should preserve symbolic links in filtered directory copies', async () => {
@@ -860,6 +862,129 @@ describe('helpers.ts - copy and write functions', () => {
         expect(await fs.pathExists(path.join(destSubDir, '.git', 'objects', 'pack'))).toBe(true);
         // Orphan outside .git should be deleted
         expect(await fs.pathExists(path.join(destSubDir, 'orphan.txt'))).toBe(false);
+      });
+    });
+
+    describe('excludeAbsolutePaths (protects this action\'s own working directory)', () => {
+      it('should not copy an excluded absolute path nested inside the source', async () => {
+        const srcSubDir = path.join(srcDir, 'exclude-abs-path');
+        const destSubDir = path.join(destDir, 'exclude-abs-path');
+        const workingDir = path.join(srcSubDir, 'tmp-working-dir');
+
+        await fs.ensureDir(workingDir);
+        await fs.writeFile(path.join(srcSubDir, 'keep.txt'), 'Keep');
+        await fs.writeFile(path.join(workingDir, 'other-repo-clone.txt'), 'Should never be copied');
+
+        const fileConfig: FileConfig = {
+          source: srcSubDir,
+          dest: destSubDir,
+          template: false,
+          replace: true,
+          deleteOrphaned: false,
+          exclude: undefined
+        };
+
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, [workingDir]);
+
+        expect(await fs.pathExists(path.join(destSubDir, 'keep.txt'))).toBe(true);
+        expect(await fs.pathExists(path.join(destSubDir, 'tmp-working-dir'))).toBe(false);
+      });
+
+      it('should still apply normal exclude patterns to sibling entries alongside a path exclusion', async () => {
+        const srcSubDir = path.join(srcDir, 'exclude-abs-path-and-pattern');
+        const destSubDir = path.join(destDir, 'exclude-abs-path-and-pattern');
+        const workingDir = path.join(srcSubDir, 'tmp-working-dir');
+
+        await fs.ensureDir(workingDir);
+        await fs.writeFile(path.join(srcSubDir, 'keep.txt'), 'Keep');
+        await fs.writeFile(path.join(srcSubDir, 'skip.log'), 'Skip via exclude pattern');
+        await fs.writeFile(path.join(workingDir, 'other-repo-clone.txt'), 'Should never be copied');
+
+        const fileConfig: FileConfig = {
+          source: srcSubDir,
+          dest: destSubDir,
+          template: false,
+          replace: true,
+          deleteOrphaned: false,
+          exclude: ['**/*.log']
+        };
+
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, [workingDir]);
+
+        expect(await fs.pathExists(path.join(destSubDir, 'keep.txt'))).toBe(true);
+        expect(await fs.pathExists(path.join(destSubDir, 'skip.log'))).toBe(false);
+        expect(await fs.pathExists(path.join(destSubDir, 'tmp-working-dir'))).toBe(false);
+      });
+
+      it('should not throw "Cannot copy to a subdirectory of itself" when the destination lives inside the excluded path', async () => {
+        // Reproduces syncing `source: ./` when TMP_DIR (the default relative
+        // path) resolves inside the source root: the destination for this
+        // sync is necessarily nested inside the working directory being
+        // excluded. A plain fs.copy(src, dest, { filter }) call would throw
+        // here regardless of any exclude pattern, because fs-extra checks
+        // this before ever calling the filter - see
+        // https://github.com/BetaHuhn/repo-file-sync-action/issues/348.
+        const srcRoot = path.join(srcDir, 'crash-repro');
+        const workingDir = path.join(srcRoot, 'tmp-1721900000000');
+        const clonedRepoDir = path.join(workingDir, 'github.com', 'acme', 'target@main');
+        const destSubDir = path.join(clonedRepoDir, 'dest-folder');
+
+        await fs.ensureDir(clonedRepoDir);
+        await fs.writeFile(path.join(srcRoot, 'README.md'), 'Root file');
+        await fs.ensureDir(path.join(srcRoot, 'src'));
+        await fs.writeFile(path.join(srcRoot, 'src', 'index.ts'), 'Sibling file');
+        // Some other in-progress clone that must never leak into this sync
+        await fs.writeFile(path.join(workingDir, 'unrelated-file.txt'), 'Do not copy');
+
+        const fileConfig: FileConfig = {
+          source: srcRoot,
+          dest: destSubDir,
+          template: false,
+          replace: true,
+          deleteOrphaned: false,
+          exclude: undefined
+        };
+
+        await expect(
+          copy(srcRoot + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, [workingDir])
+        ).resolves.not.toThrow();
+
+        expect(await fs.pathExists(path.join(destSubDir, 'README.md'))).toBe(true);
+        expect(await fs.pathExists(path.join(destSubDir, 'src', 'index.ts'))).toBe(true);
+        expect(await fs.pathExists(path.join(destSubDir, 'tmp-1721900000000'))).toBe(false);
+      });
+
+      it('should manually recurse through an ancestor branch leading to a nested excluded path', async () => {
+        // TMP_DIR configured as a multi-segment relative path (e.g.
+        // `some/nested/tmp`) means the excluded path is *inside* a top-level
+        // entry rather than being one itself - the copy still must not treat
+        // that ancestor entry as a plain fs.copy candidate, since the
+        // destination is nested inside it too.
+        const srcRoot = path.join(srcDir, 'nested-ancestor');
+        const ancestorDir = path.join(srcRoot, 'some');
+        const workingDir = path.join(ancestorDir, 'nested', 'tmp');
+        const destSubDir = path.join(workingDir, 'target-clone', 'dest-folder');
+
+        await fs.ensureDir(path.join(ancestorDir, 'sibling-dir'));
+        await fs.ensureDir(path.join(workingDir, 'target-clone'));
+        await fs.writeFile(path.join(ancestorDir, 'sibling-dir', 'keep.txt'), 'Keep');
+        await fs.writeFile(path.join(workingDir, 'secret.txt'), 'Never copy');
+
+        const fileConfig: FileConfig = {
+          source: srcRoot,
+          dest: destSubDir,
+          template: false,
+          replace: true,
+          deleteOrphaned: false,
+          exclude: undefined
+        };
+
+        await expect(
+          copy(srcRoot + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, [workingDir])
+        ).resolves.not.toThrow();
+
+        expect(await fs.pathExists(path.join(destSubDir, 'some', 'sibling-dir', 'keep.txt'))).toBe(true);
+        expect(await fs.pathExists(path.join(destSubDir, 'some', 'nested', 'tmp'))).toBe(false);
       });
     });
   });

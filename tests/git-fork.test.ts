@@ -120,7 +120,7 @@ describe('git.ts - fork workflow', () => {
     await git.push();
 
     expect(execGitMock).toHaveBeenCalledWith(['remote', 'set-branches', 'fork', '*'], git.workingDir);
-    expect(execGitMock).toHaveBeenCalledWith(['fetch', '-v', '--depth=1', 'fork'], git.workingDir);
+    expect(execGitMock).toHaveBeenCalledWith(['fetch', '-v', 'fork'], git.workingDir);
     expect(execGitMock).toHaveBeenCalledWith(['rev-parse', '--verify', 'fork/sync/main'], git.workingDir);
     expect(execGitMock).toHaveBeenCalledWith(
       ['switch', '--track', '-c', 'sync/main', 'fork/sync/main'],
@@ -131,6 +131,15 @@ describe('git.ts - fork workflow', () => {
     expect(pullsListMock).toHaveBeenCalledWith(
       expect.objectContaining({ state: 'open', head: 'sync-bot:sync/main' })
     );
+  });
+
+  it('should clone with full history (no --depth) to safely reconcile a diverged fork branch', async () => {
+    const git = new Git();
+
+    await git.initRepo(repo);
+
+    const cloneCall = execGitMock.mock.calls.find((call) => Array.isArray(call[0]) && call[0][0] === 'clone');
+    expect(cloneCall?.[0]).not.toContain('--depth');
   });
 
   it('should force-update a fork branch with a lease', async () => {
