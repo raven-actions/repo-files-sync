@@ -63,11 +63,22 @@ function initializeContext(): ConfigContext {
     DELETE_ORPHANED: getBooleanInput('DELETE_ORPHANED', false),
     BRANCH_PREFIX: getOptionalInput('BRANCH_PREFIX', 'repo-sync/SOURCE_REPO_NAME'),
     FORK: getDisableableInput('FORK', false),
-    TEMPLATE_SANDBOX: getBooleanInput('TEMPLATE_SANDBOX', true)
+    TEMPLATE_SANDBOX: getBooleanInput('TEMPLATE_SANDBOX', true),
+    TEMPLATE_AUTOESCAPE: getBooleanInput('TEMPLATE_AUTOESCAPE', true)
   };
 
   core.setSecret(context.GITHUB_TOKEN);
   core.debug(JSON.stringify(context, null, 2));
+
+  // An installation token doesn't represent a real user, so the commit
+  // identity can't be looked up from the token the way it is for a PAT (see
+  // Git.setIdentity). Failing fast here avoids silently committing as the
+  // literal string "undefined" <undefined> - see
+  // https://github.com/BetaHuhn/repo-file-sync-action/issues/354.
+  if (context.IS_INSTALLATION_TOKEN && (!context.GIT_EMAIL || !context.GIT_USERNAME)) {
+    core.setFailed('GIT_EMAIL and GIT_USERNAME are required when GH_TOKEN is a GitHub App installation token (prefix `ghs_`).');
+    process.exit(1);
+  }
 
   // REBASE only applies to the reuse-an-existing-PR flow. Warn when it is
   // combined with options that bypass that flow so it has no silent surprises.

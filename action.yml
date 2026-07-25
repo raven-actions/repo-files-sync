@@ -164,6 +164,15 @@ inputs:
       Set to false to disable; a warning is logged every run while disabled.
       Defaults to true.
     required: false
+  TEMPLATE_AUTOESCAPE:
+    description: |
+      Enable Nunjucks' autoescape option for rendered `template` files.
+      Autoescaping is meant for HTML/XML output and will replace characters
+      like `'` with `&#39;`, which usually isn't desired when templating
+      non-HTML files (YAML, shell scripts, etc.).
+      Set to false to disable autoescaping.
+      Defaults to true.
+    required: false
 
 outputs:
   pull_request_urls:

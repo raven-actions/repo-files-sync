@@ -215,7 +215,8 @@ describe('types.ts - Type Definitions', () => {
         DELETE_ORPHANED: false,
         BRANCH_PREFIX: 'repo-sync/SOURCE_REPO_NAME',
         FORK: false,
-        TEMPLATE_SANDBOX: true
+        TEMPLATE_SANDBOX: true,
+        TEMPLATE_AUTOESCAPE: true
       };
 
       expect(context.GITHUB_TOKEN).toBeDefined();
@@ -254,7 +255,8 @@ describe('types.ts - Type Definitions', () => {
         DELETE_ORPHANED: false,
         BRANCH_PREFIX: 'repo-sync/SOURCE_REPO_NAME',
         FORK: 'fork-user',
-        TEMPLATE_SANDBOX: true
+        TEMPLATE_SANDBOX: true,
+        TEMPLATE_AUTOESCAPE: true
       };
 
       expect(context.FORK).toBe('fork-user');

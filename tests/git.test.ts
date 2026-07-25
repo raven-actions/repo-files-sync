@@ -442,6 +442,18 @@ describe('git.ts - Git class', () => {
       expect(cloneCall?.[0]).toContain('main');
     });
 
+    it('should clone shallow (--depth 1) when not using the FORK workflow', async () => {
+      execGitMock.mockResolvedValue('main');
+
+      await git.initRepo(mockRepoInfo);
+
+      const cloneCall = execGitMock.mock.calls.find(
+        (call) => Array.isArray(call[0]) && call[0][0] === 'clone'
+      );
+      expect(cloneCall?.[0]).toContain('--depth');
+      expect(cloneCall?.[0]).toContain('1');
+    });
+
     it('should clone without branch option when branch is default', async () => {
       const defaultBranchRepo: RepoInfo = {
         ...mockRepoInfo,

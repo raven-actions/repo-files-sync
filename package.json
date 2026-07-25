@@ -10,6 +10,7 @@
   "dependencies": {
     "@actions/core": "^3.0.1",
     "@actions/github": "^9.1.1",
+    "@octokit/plugin-retry": "^8.1.0",
     "@octokit/plugin-throttling": "^11.0.3",
     "ajv": "^8.20.0",
     "fs-extra": "^11.3.6",

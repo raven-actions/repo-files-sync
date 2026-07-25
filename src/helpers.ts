@@ -43,6 +43,18 @@ export async function readFilesRecursive(dir: string, includeHidden = false): Pr
 // Configure nunjucks
 nunjucks.configure({ autoescape: true, trimBlocks: true, lstripBlocks: true });
 
+/**
+ * Reconfigure the shared Nunjucks environment's `autoescape` option. Defaults
+ * to `true` (unchanged behavior); set to `false` for source files that are
+ * not HTML/XML (e.g. YAML, shell scripts) where autoescaping would otherwise
+ * corrupt content such as replacing `'` with `&#39;` - see
+ * https://github.com/BetaHuhn/repo-file-sync-action/issues/278.
+ * @internal Exported for testing
+ */
+export function configureTemplateAutoescape(enabled: boolean): void {
+  nunjucks.configure({ autoescape: enabled, trimBlocks: true, lstripBlocks: true });
+}
+
 // --- Template execution sandbox --------------------------------------------
 //
 // Nunjucks explicitly does not sandbox template execution (see its own
@@ -231,7 +243,11 @@ export async function pathIsDirectory(filePath: string): Promise<boolean> {
   return stat.isDirectory();
 }
 
-function isPathWithinRoot(root: string, candidate: string): boolean {
+/**
+ * Returns true when `candidate` is `root` itself or lives somewhere inside it.
+ * @internal Exported for testing and reuse (e.g. index.ts's TMP_DIR guard)
+ */
+export function isPathWithinRoot(root: string, candidate: string): boolean {
   const relative = path.relative(root, candidate);
   return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
 }

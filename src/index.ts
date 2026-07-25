@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import * as fs from 'fs';
+import * as path from 'path';
 
 import Git from './git.js';
 import {
@@ -8,10 +9,12 @@ import {
   addTrailingSlash,
   pathIsDirectory,
   resolvePathWithinRoot,
+  isPathWithinRoot,
   copy,
   remove,
   arrayEquals,
-  configureTemplateSandbox
+  configureTemplateSandbox,
+  configureTemplateAutoescape
 } from './helpers.js';
 import { parseConfig, default as config } from './config.js';
 
@@ -33,8 +36,32 @@ const {
   FORK,
   REVIEWERS,
   TEAM_REVIEWERS,
-  TEMPLATE_SANDBOX
+  TEMPLATE_SANDBOX,
+  TEMPLATE_AUTOESCAPE
 } = config;
+
+/**
+ * Ensure this action's own TMP_DIR working directory is never copied when it
+ * happens to fall inside a directory sync's source (e.g. `source: ./` at the
+ * repo root, combined with the default relative TMP_DIR). Without this, an
+ * in-progress clone of a target repo - including other target repos' working
+ * directories from the same run - could be copied into a destination, and
+ * can trip fs-extra's "Cannot copy X to a subdirectory of itself" guard when
+ * the destination also happens to live inside it. See
+ * https://github.com/BetaHuhn/repo-file-sync-action/issues/348 and
+ * https://github.com/BetaHuhn/repo-file-sync-action/issues/322.
+ */
+function withTmpDirExcluded(file: FileConfig, localSource: string): FileConfig {
+  const tmpDirAbsolute = path.resolve(TMP_DIR);
+
+  if (!isPathWithinRoot(localSource, tmpDirAbsolute)) {
+    return file;
+  }
+
+  const pattern = path.relative(localSource, tmpDirAbsolute).replace(/\\/g, '/') || '.';
+  core.debug(`Excluding this action's working directory (${pattern}) from directory sync`);
+  return { ...file, exclude: [...(file.exclude ?? []), pattern] };
+}
 
 /**
  * Process a single file sync operation
@@ -85,7 +112,9 @@ async function processFile(
       core.info('Source is directory');
     }
 
-    await copy(source, dest, isDirectory, file, item);
+    const effectiveFile = isDirectory ? withTmpDirExcluded(file, localSource) : file;
+
+    await copy(source, dest, isDirectory, effectiveFile, item);
     await git.add(file.dest);
   }
 
@@ -319,6 +348,7 @@ async function run(): Promise<void> {
         'files from fully trusted sources.'
     );
   }
+  configureTemplateAutoescape(TEMPLATE_AUTOESCAPE);
 
   // Reuse octokit for each repo
   const git = new Git();

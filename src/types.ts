@@ -139,6 +139,7 @@ export interface ConfigContext {
   BRANCH_PREFIX: string;
   FORK: string | false | undefined;
   TEMPLATE_SANDBOX: boolean;
+  TEMPLATE_AUTOESCAPE: boolean;
 }
 
 // Helper function callback types

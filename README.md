@@ -160,6 +160,7 @@ Here are all the inputs [repo-files-sync](https://github.com/raven-actions/repo-
 | `DELETE_ORPHANED`       | Global default for deleting orphaned files in target repositories (used when file-level `deleteOrphaned` is not set)                                                                                            | **No**                                 | false                          |
 | `FORK`                  | A Github account username. Changes will be pushed to a fork of target repos on this account.                                                                                                                    | **No**                                 | false                          |
 | `TEMPLATE_SANDBOX`      | Harden Nunjucks template rendering against common `constructor`/`__proto__` template-injection escapes. Best-effort, not a full sandbox - see [Using templates](#using-templates). Logs a warning every run when disabled | **No**                                 | true                           |
+| `TEMPLATE_AUTOESCAPE`   | Enable Nunjucks' autoescape option for rendered `template` files. Set to false when templating non-HTML files (YAML, shell scripts) where escaping `'`/`<`/`>` isn't desired                                    | **No**                                 | true                           |
 
 ### Input behavior notes
 
@@ -168,6 +169,7 @@ Here are all the inputs [repo-files-sync](https://github.com/raven-actions/repo-
 - `SKIP_CLEANUP: true` keeps the working directory (`TMP_DIR`) on the runner for debugging.
 - `REBASE: true` keeps an open sync PR rebased on the latest base branch, similar to [Dependabot's rebase](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/managing-pull-requests-for-dependency-updates#managing-dependabot-pull-requests-with-comment-commands). When the PR branch is behind the base branch it is rebuilt on top of the latest base and force-pushed, so any commits pushed manually to the sync branch are discarded. Requires `OVERWRITE_EXISTING_PR` (the default) and has no effect with `SKIP_PR`.
 - `TEMPLATE_SANDBOX: false` disables the template rendering hardening described in [Using templates](#using-templates) and logs a warning on every run while it is disabled.
+- `GIT_EMAIL`/`GIT_USERNAME` are validated up front: the action fails fast with a clear error if either is missing while `GH_TOKEN` is a GitHub App installation token, instead of silently committing with an empty/invalid identity.
 
 ### Outputs
 
@@ -714,6 +716,9 @@ A fork of each target repository will be created on this account, and all change
 
 Note: while you can open pull requests to target repositories without write access, some features, like applying labels, are not possible.
 
+> [!NOTE]
+> When `FORK` is set, the initial clone and the fork-branch fetch use full history instead of the usual shallow (depth 1) clone. This is needed to safely reconcile the fork's branch when it has diverged from the target repo (e.g. after a previous sync PR was merged upstream), and avoids a `shallow update not allowed` error. Non-fork syncs are unaffected and remain shallow.
+
 ```yml
 uses: raven-actions/repo-files-sync@v0.1.0
 with:
@@ -823,7 +828,13 @@ group:
 - Added global `DELETE_ORPHANED` default and extended `deleteOrphaned` to work for **single files** as well as directories.
 - Added group-level `reviewers` (overrides global `REVIEWERS`) and `branchSuffix` to support multiple independent sync PRs per target repo.
 - Templates: always inject a built-in `repo` object into the Nunjucks context (host/user/name/branch/url, etc.) for easier bulk templating.
+- Templates render through a hardened-by-default sandbox (`TEMPLATE_SANDBOX`) and a configurable `TEMPLATE_AUTOESCAPE` option.
 - Improved path/pattern normalization (accepts full paths and normalizes them relative to `source`; consistent `/` handling across OSes).
+- This action's own working directory (`TMP_DIR`) is automatically excluded from directory syncs when it falls inside the configured `source` (e.g. `source: ./`), instead of being copied into the destination.
+- The `FORK` workflow clones and fetches with full history instead of a shallow clone, avoiding `shallow update not allowed` failures when reconciling a diverged fork branch.
+- `GH_TOKEN` API calls automatically retry on transient GitHub server errors (`@octokit/plugin-retry`), in addition to the existing rate-limit handling.
+- `GIT_EMAIL`/`GIT_USERNAME` are validated up front and required when `GH_TOKEN` is a GitHub App installation token, instead of silently falling back to an invalid identity.
+- Reviewer/team-reviewer request failures are re-raised with actionable guidance (e.g. missing collaborator/permission hints) instead of GitHub's terse API error alone.
 
 ## 👥 Contributing
 
