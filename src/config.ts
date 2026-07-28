@@ -1,9 +1,11 @@
 import * as core from '@actions/core';
 import { Ajv } from 'ajv/dist/ajv.js';
 import * as yaml from 'js-yaml';
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
 import fs from 'fs-extra';
+
+// Bundled at build time by esbuild, so the published action only ships `dist/`
+// and never reads `sync.schema.json` from the action directory at runtime.
+import schema from '../sync.schema.json' with { type: 'json' };
 
 import { getInput, getBooleanInput, getArrayInput, getOptionalInput, getDisableableInput, getDisableableArrayInput } from './input.js';
 import type { ConfigContext, RepoInfo, FileConfig, RepoConfig, RawFileConfig, GroupConfig } from './types.js';
@@ -202,8 +204,6 @@ function parseFiles(files: (string | RawFileConfig)[]): FileConfig[] {
  */
 type YamlConfig = Record<string, (string | RawFileConfig)[] | GroupConfig | GroupConfig[]>;
 
-const schemaPath = fileURLToPath(new URL('../sync.schema.json', import.meta.url));
-const schema = JSON.parse(readFileSync(schemaPath, 'utf8')) as object;
 const ajv = new Ajv({ allErrors: true, strict: false });
 const validateConfig = ajv.compile<YamlConfig>(schema);
 
