@@ -4,7 +4,15 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 /**
- * Creates a branch with only the required files for publishing.
+ * Creates an ORPHAN branch carrying only the required files for publishing.
+ *
+ * The branch shares no history with the default branch: its first commit is a
+ * root commit, and later releases extend that branch's own history. Every commit
+ * therefore reads as "here are the release artifacts", not as a commit that
+ * deletes the rest of the repository relative to `main`. The tree is built from
+ * the file list alone (no `base_tree`), so anything dropped from the list simply
+ * disappears from the next release commit.
+ *
  * This script is designed to be used with actions/github-script.
  *
  * Inputs (via environment variables INPUT_*):
@@ -12,9 +20,8 @@ import path from 'node:path'
  * - FILES (required): Multiline list of files/directories to include
  * - BRANCH_PREFIX (optional): Branch prefix, default: "release"
  * - COMMIT_MESSAGE (optional): Commit message template, use {tag} placeholder, default: "chore(release): {tag}"
- * - BASE_BRANCH (optional): Base branch to create release from, default: "main"
- * - BASE_SHA (optional): Parent commit SHA to use instead of resolving BASE_BRANCH
- * - DELETE_EXISTING (optional): Delete existing branch if exists, default: "true"
+ * - SOURCE_SHA (optional): Source commit the artifacts were built from, recorded
+ *   as a `Source-Commit` trailer (an orphan branch has no parent link to it)
  *
  * @param {Object} params
  * @param {import('@actions/github').Context} params.context - GitHub Actions context
@@ -31,15 +38,15 @@ export default async function main({ context, github, core }) {
   // Optional inputs with defaults
   const branchPrefix = core.getInput('BRANCH_PREFIX') || 'release'
   const commitMessageTemplate = core.getInput('COMMIT_MESSAGE') || 'chore(release): {tag}'
-  const baseBranch = core.getInput('BASE_BRANCH') || 'main'
-  const baseSha = core.getInput('BASE_SHA')
+  const sourceSha = core.getInput('SOURCE_SHA')
 
-  // getBooleanInput throws if value is not a valid YAML boolean, so we need to check if input exists first
-  const deleteExistingInput = core.getInput('DELETE_EXISTING')
-  const deleteExisting = deleteExistingInput ? core.getBooleanInput('DELETE_EXISTING') : true
+  if (sourceSha && !/^[0-9a-f]{40}$/i.test(sourceSha)) {
+    throw new Error(`SOURCE_SHA must be a full 40-character commit SHA: ${sourceSha}`)
+  }
 
   const branch = `${branchPrefix}/${tag}`
-  const commitMessage = commitMessageTemplate.replace(/{tag}/g, tag)
+  const subject = commitMessageTemplate.replace(/{tag}/g, tag)
+  const commitMessage = sourceSha ? `${subject}\n\nSource-Commit: ${sourceSha}\n` : subject
 
   // Validate required files exist
   for (const file of requiredFiles) {
@@ -48,40 +55,21 @@ export default async function main({ context, github, core }) {
     }
   }
 
-  // Delete branch if it exists (remotely)
-  if (deleteExisting) {
-    core.info(`Deleting existing branch ${branch} if exists...`)
-    try {
-      await github.rest.git.deleteRef({
-        owner,
-        repo,
-        ref: `heads/${branch}`
-      })
-      core.info(`Deleted existing branch ${branch}`)
-    } catch (error) {
-      const err = /** @type {{ status?: number }} */ (error)
-      if (err.status !== 422 && err.status !== 404) {
-        throw error
-      }
+  // Resolve the current branch tip, if the branch already exists.
+  let tipSha = null
+  let tipTreeSha = null
+  try {
+    const { data: ref } = await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` })
+    tipSha = ref.object.sha
+    const { data: tipCommit } = await github.rest.git.getCommit({ owner, repo, commit_sha: tipSha })
+    tipTreeSha = tipCommit.tree.sha
+    core.info(`Branch ${branch} exists at ${tipSha}; extending its history.`)
+  } catch (error) {
+    const err = /** @type {{ status?: number }} */ (error)
+    if (err.status !== 404) {
+      throw error
     }
-  }
-
-  // Get parent SHA for the new commit. Prerelease workflows pass the exact CI-tested
-  // SHA so the curated release commit cannot accidentally parent a newer main tip.
-  let parentSha = baseSha
-  if (parentSha) {
-    if (!/^[0-9a-f]{40}$/i.test(parentSha)) {
-      throw new Error(`BASE_SHA must be a full 40-character commit SHA: ${parentSha}`)
-    }
-    core.info(`Using explicit base SHA ${parentSha}`)
-  } else {
-    core.info(`Getting ${baseBranch} branch HEAD...`)
-    const { data: baseRef } = await github.rest.git.getRef({
-      owner,
-      repo,
-      ref: `heads/${baseBranch}`
-    })
-    parentSha = baseRef.object.sha
+    core.info(`Branch ${branch} does not exist; creating it as an orphan branch.`)
   }
 
   /**
@@ -233,26 +221,42 @@ export default async function main({ context, github, core }) {
   core.info('Creating trees...')
   const rootTreeSha = await buildTreeFromFiles(fileBlobs)
 
-  // Create commit with parent from base branch (will be verified)
+  // Nothing changed since the last release commit - avoid piling up empty commits.
+  if (tipSha && tipTreeSha === rootTreeSha) {
+    core.info(`Branch ${branch} already carries these exact files at ${tipSha}; leaving it untouched.`)
+    core.setOutput('name', branch)
+    core.setOutput('sha', tipSha)
+    return branch
+  }
+
+  // Root commit on first release, otherwise a fast-forward on the branch's own history.
   core.info('Creating verified commit...')
   const { data: commit } = await github.rest.git.createCommit({
     owner,
     repo,
     message: commitMessage,
     tree: rootTreeSha,
-    parents: [parentSha]
+    parents: tipSha ? [tipSha] : []
   })
 
-  // Create branch ref pointing to the new commit
-  core.info('Creating branch...')
-  await github.rest.git.createRef({
-    owner,
-    repo,
-    ref: `refs/heads/${branch}`,
-    sha: commit.sha
-  })
-
-  core.info(`Created branch ${branch} from ${baseBranch} with verified commit ${commit.sha}`)
+  if (tipSha) {
+    await github.rest.git.updateRef({
+      owner,
+      repo,
+      ref: `heads/${branch}`,
+      sha: commit.sha,
+      force: false
+    })
+    core.info(`Updated orphan branch ${branch} with verified commit ${commit.sha}`)
+  } else {
+    await github.rest.git.createRef({
+      owner,
+      repo,
+      ref: `refs/heads/${branch}`,
+      sha: commit.sha
+    })
+    core.info(`Created orphan branch ${branch} with verified commit ${commit.sha}`)
+  }
 
   // Set outputs
   core.setOutput('name', branch)

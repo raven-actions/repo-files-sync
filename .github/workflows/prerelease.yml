@@ -184,7 +184,9 @@ jobs:
         env:
           INPUT_TAG: ${{ steps.release-details.outputs.version }}
           INPUT_BRANCH_PREFIX: prerelease
-          INPUT_BASE_SHA: ${{ github.event.workflow_run.head_sha }}
+          # Orphan branch: no parent links back to main, so record the exact
+          # CI-tested commit the artifacts were built from as a message trailer.
+          INPUT_SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
           INPUT_FILES: |
             LICENSE
             README.md
