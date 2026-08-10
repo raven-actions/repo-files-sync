@@ -16,7 +16,7 @@ flowchart TD
         PR["PR merged to main<br/>(squash · Conventional Commit)"]
         CI["CI workflow<br/>lint · typecheck · build · test"]
         SKIP["Skipped · no-op<br/>(chore release commit or no version bump)"]
-        PRE["Prerelease workflow<br/>rebuild dist + SLSA provenance<br/>pin README to vX.Y.Z-rc.N<br/>verified commit on prerelease/vX.Y.Z"]
+        PRE["Prerelease workflow<br/>rebuild dist + SLSA provenance<br/>pin README to vX.Y.Z-rc.N<br/>verified commit on orphan prerelease/vX.Y.Z"]
         DRAFT["Draft prerelease vX.Y.Z-rc.N<br/>overwritten in place each run"]
         PR --> CI
         CI -->|"success & releasable"| PRE
@@ -70,7 +70,7 @@ flowchart TD
    - rebuilds `dist/` from the exact tested commit and attaches a signed SLSA build provenance attestation,
    - skips entirely if no version-bumping commits landed (no-op guard),
    - pins the `README.md` usage examples to the RC tag `vX.Y.Z-rc.N`, so the draft/prerelease advertises the exact version a consumer would install from it (the final release re-pins these to the stable `vX.Y.Z` when cut),
-   - creates a GitHub-**verified** commit on the `prerelease/vX.Y.Z` branch (curated release files only); this branch tip always points at the latest RC,
+   - creates a GitHub-**verified** commit on the `prerelease/vX.Y.Z` branch (curated release files only); this branch tip always points at the latest RC. The branch is an **orphan branch** - it shares no history with `main`, so its commits read as "here are the release artifacts" instead of a commit that deletes the rest of the repository. The CI-tested `main` commit the artifacts were built from is recorded as a `Source-Commit:` trailer in the commit message. A run whose artifacts are byte-identical to the current tip leaves the branch untouched instead of adding an empty commit,
    - overwrites the pending **draft** prerelease `vX.Y.Z-rc.N` (deleting any previous draft RC first), so at most one draft is ever pending and it targets that branch tip.
 
 **Promoting a draft to a real RC.** RCs are never published automatically. When a draft looks good, open it on the **Releases** page and click **Publish release**. That creates the immutable `vX.Y.Z-rc.N` tag at the current `prerelease/vX.Y.Z` branch tip and advances the proposed number for the next draft.
