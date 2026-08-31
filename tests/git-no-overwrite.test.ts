@@ -7,9 +7,12 @@ vi.mock('@actions/core', () => ({ debug: vi.fn(), info: vi.fn(), warning: vi.fn(
 vi.mock('@actions/github', () => ({ context: { eventName: 'workflow_dispatch', payload: {} } }));
 vi.mock('@actions/github/lib/utils', () => ({
   GitHub: {
-    plugin: vi.fn(() => class MockOctokit {
-      rest = { repos: {}, users: {}, pulls: {}, issues: {}, git: {} };
-    })
+    plugin: vi.fn(
+      () =>
+        class MockOctokit {
+          rest = { repos: {}, users: {}, pulls: {}, issues: {}, git: {} };
+        }
+    )
   },
   getOctokitOptions: vi.fn(() => ({}))
 }));
@@ -78,9 +81,20 @@ describe('git.ts - no-overwrite mode', () => {
       vi.useRealTimers();
     }
 
-    expect(mocks.execGit).toHaveBeenCalledWith(['switch', '-c', 'sync/main-suffix-1700000000'], git.workingDir);
     expect(mocks.execGit).toHaveBeenCalledWith(
-      ['commit', '-m', 'sync: synced file(s) with \n\nCommit details'],
+      [
+        'switch',
+        '-c',
+        'sync/main-suffix-1700000000'
+      ],
+      git.workingDir
+    );
+    expect(mocks.execGit).toHaveBeenCalledWith(
+      [
+        'commit',
+        '-m',
+        'sync: synced file(s) with \n\nCommit details'
+      ],
       git.workingDir
     );
     expect(mocks.execGit.mock.calls.find((call) => call[0][0] === 'clone')?.[0]).toContain(

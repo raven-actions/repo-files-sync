@@ -10,15 +10,18 @@ vi.mock('@actions/core', () => ({ debug: vi.fn(), info: vi.fn(), warning: vi.fn(
 vi.mock('@actions/github', () => ({ context: { eventName: 'workflow_dispatch', payload: {} } }));
 vi.mock('@actions/github/lib/utils', () => ({
   GitHub: {
-    plugin: vi.fn(() => class MockOctokit {
-      rest = {
-        repos: {},
-        users: { getAuthenticated: vi.fn() },
-        pulls: { update: vi.fn() },
-        issues: {},
-        git: { updateRef: mocks.updateRef }
-      };
-    })
+    plugin: vi.fn(
+      () =>
+        class MockOctokit {
+          rest = {
+            repos: {},
+            users: { getAuthenticated: vi.fn() },
+            pulls: { update: vi.fn() },
+            issues: {},
+            git: { updateRef: mocks.updateRef }
+          };
+        }
+    )
   },
   getOctokitOptions: vi.fn(() => ({}))
 }));

@@ -112,7 +112,11 @@ describe('input.ts', () => {
 
       const result = getArrayInput('ARRAY_KEY');
 
-      expect(result).toEqual(['item1', 'item2', 'item3']);
+      expect(result).toEqual([
+        'item1',
+        'item2',
+        'item3'
+      ]);
     });
 
     it('should parse newline-separated values', () => {
@@ -120,7 +124,11 @@ describe('input.ts', () => {
 
       const result = getArrayInput('ARRAY_KEY');
 
-      expect(result).toEqual(['item1', 'item2', 'item3']);
+      expect(result).toEqual([
+        'item1',
+        'item2',
+        'item3'
+      ]);
     });
 
     it('should parse mixed comma and newline separated values', () => {
@@ -128,7 +136,12 @@ describe('input.ts', () => {
 
       const result = getArrayInput('ARRAY_KEY');
 
-      expect(result).toEqual(['item1', 'item2', 'item3', 'item4']);
+      expect(result).toEqual([
+        'item1',
+        'item2',
+        'item3',
+        'item4'
+      ]);
     });
 
     it('should filter empty items', () => {
@@ -136,7 +149,11 @@ describe('input.ts', () => {
 
       const result = getArrayInput('ARRAY_KEY');
 
-      expect(result).toEqual(['item1', 'item2', 'item3']);
+      expect(result).toEqual([
+        'item1',
+        'item2',
+        'item3'
+      ]);
     });
 
     it('should trim whitespace from items', () => {
@@ -144,7 +161,10 @@ describe('input.ts', () => {
 
       const result = getArrayInput('ARRAY_KEY');
 
-      expect(result).toEqual(['item1', 'item2']);
+      expect(result).toEqual([
+        'item1',
+        'item2'
+      ]);
     });
 
     it('should return undefined when input is empty', () => {
@@ -158,11 +178,26 @@ describe('input.ts', () => {
 
   describe('getDisableableInput', () => {
     it.each([
-      ['false', undefined],
-      ['FALSE', undefined],
-      ['0', undefined],
-      ['no', undefined],
-      ['NO', undefined]
+      [
+        'false',
+        undefined
+      ],
+      [
+        'FALSE',
+        undefined
+      ],
+      [
+        '0',
+        undefined
+      ],
+      [
+        'no',
+        undefined
+      ],
+      [
+        'NO',
+        undefined
+      ]
     ])('should return undefined for disabled value "%s"', (input) => {
       vi.mocked(core.getInput).mockReturnValue(input);
 
@@ -198,11 +233,26 @@ describe('input.ts', () => {
 
   describe('getDisableableArrayInput', () => {
     it.each([
-      ['false', undefined],
-      ['FALSE', undefined],
-      ['0', undefined],
-      ['no', undefined],
-      ['NO', undefined]
+      [
+        'false',
+        undefined
+      ],
+      [
+        'FALSE',
+        undefined
+      ],
+      [
+        '0',
+        undefined
+      ],
+      [
+        'no',
+        undefined
+      ],
+      [
+        'NO',
+        undefined
+      ]
     ])('should return undefined for disabled value "%s"', (input) => {
       vi.mocked(core.getInput).mockReturnValue(input);
 
@@ -214,9 +264,15 @@ describe('input.ts', () => {
     it('should return default array when input is empty', () => {
       vi.mocked(core.getInput).mockReturnValue('');
 
-      const result = getDisableableArrayInput('ARRAY_KEY', ['default1', 'default2']);
+      const result = getDisableableArrayInput('ARRAY_KEY', [
+        'default1',
+        'default2'
+      ]);
 
-      expect(result).toEqual(['default1', 'default2']);
+      expect(result).toEqual([
+        'default1',
+        'default2'
+      ]);
     });
 
     it('should parse array when not disabled', () => {
@@ -224,7 +280,10 @@ describe('input.ts', () => {
 
       const result = getDisableableArrayInput('ARRAY_KEY', ['default']);
 
-      expect(result).toEqual(['item1', 'item2']);
+      expect(result).toEqual([
+        'item1',
+        'item2'
+      ]);
     });
 
     it('should parse newline-separated values', () => {
@@ -232,7 +291,11 @@ describe('input.ts', () => {
 
       const result = getDisableableArrayInput('ARRAY_KEY', []);
 
-      expect(result).toEqual(['item1', 'item2', 'item3']);
+      expect(result).toEqual([
+        'item1',
+        'item2',
+        'item3'
+      ]);
     });
 
     it('should filter empty items', () => {
@@ -240,7 +303,11 @@ describe('input.ts', () => {
 
       const result = getDisableableArrayInput('ARRAY_KEY', []);
 
-      expect(result).toEqual(['item1', 'item2', 'item3']);
+      expect(result).toEqual([
+        'item1',
+        'item2',
+        'item3'
+      ]);
     });
   });
 });

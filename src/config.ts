@@ -7,7 +7,14 @@ import fs from 'fs-extra';
 // and never reads `sync.schema.json` from the action directory at runtime.
 import schema from '../sync.schema.json' with { type: 'json' };
 
-import { getInput, getBooleanInput, getArrayInput, getOptionalInput, getDisableableInput, getDisableableArrayInput } from './input.js';
+import {
+  getInput,
+  getBooleanInput,
+  getArrayInput,
+  getOptionalInput,
+  getDisableableInput,
+  getDisableableArrayInput
+} from './input.js';
 import type { ConfigContext, RepoInfo, FileConfig, RepoConfig, RawFileConfig, GroupConfig } from './types.js';
 
 // Default values
@@ -78,7 +85,9 @@ function initializeContext(): ConfigContext {
   // literal string "undefined" <undefined> - see
   // https://github.com/BetaHuhn/repo-file-sync-action/issues/354.
   if (context.IS_INSTALLATION_TOKEN && (!context.GIT_EMAIL || !context.GIT_USERNAME)) {
-    core.setFailed('GIT_EMAIL and GIT_USERNAME are required when GH_TOKEN is a GitHub App installation token (prefix `ghs_`).');
+    core.setFailed(
+      'GIT_EMAIL and GIT_USERNAME are required when GH_TOKEN is a GitHub App installation token (prefix `ghs_`).'
+    );
     process.exit(1);
   }
 
@@ -92,6 +101,18 @@ function initializeContext(): ConfigContext {
     core.warning(
       'REBASE has no effect when OVERWRITE_EXISTING_PR is false: a new branch is created from the base branch on every run.'
     );
+  }
+
+  // FORK pushes the sync branch to a fork and opens a pull request upstream,
+  // while SKIP_PR pushes straight to the target's base branch with no pull
+  // request at all. The two are mutually exclusive: with SKIP_PR there is no
+  // sync branch to push to the fork, which previously produced a `git push -u
+  // fork ""` with an empty refspec and a confusing git error.
+  if (context.FORK && context.SKIP_PR) {
+    core.setFailed(
+      'FORK cannot be combined with SKIP_PR: a fork-based sync has to open a pull request against the target repository. Unset one of them.'
+    );
+    process.exit(1);
   }
 
   // Ensure TMP_DIR is unique
@@ -231,9 +252,12 @@ function loadConfigDocument(content: string): unknown {
  * Supports `owner/name`, `owner/name@branch`, and the host-qualified forms.
  */
 function repoFilterCandidates(repo: RepoInfo): string[] {
-  return [`${repo.user}/${repo.name}`, `${repo.user}/${repo.name}@${repo.branch}`, repo.fullName, repo.uniqueName].map((value) =>
-    value.toLowerCase()
-  );
+  return [
+    `${repo.user}/${repo.name}`,
+    `${repo.user}/${repo.name}@${repo.branch}`,
+    repo.fullName,
+    repo.uniqueName
+  ].map((value) => value.toLowerCase());
 }
 
 /**
@@ -244,7 +268,9 @@ function repoFilterCandidates(repo: RepoInfo): string[] {
  * disables the filter so every repo is processed.
  */
 function filterRepos(repos: RepoConfig[]): RepoConfig[] {
-  const tokens = [...new Set((context.REPOS ?? []).map((token) => token.trim().toLowerCase()).filter((token) => token.length > 0))];
+  const tokens = [
+    ...new Set((context.REPOS ?? []).map((token) => token.trim().toLowerCase()).filter((token) => token.length > 0))
+  ];
 
   if (tokens.length === 0) {
     return repos;
@@ -269,7 +295,9 @@ function filterRepos(repos: RepoConfig[]): RepoConfig[] {
   if (filtered.length === 0) {
     core.warning('No repos matched the requested filter; nothing to sync.');
   } else {
-    core.info(`Matched ${filtered.length} repo(s): ${filtered.map((item) => `${item.repo.user}/${item.repo.name}`).join(', ')}`);
+    core.info(
+      `Matched ${filtered.length} repo(s): ${filtered.map((item) => `${item.repo.user}/${item.repo.name}`).join(', ')}`
+    );
   }
 
   return filtered;
@@ -308,7 +336,12 @@ export async function parseConfig(): Promise<RepoConfig[]> {
       existing.files.push(...files);
 
       if (reviewers && reviewers.length > 0) {
-        existing.reviewers = [...new Set([...(existing.reviewers ?? []), ...reviewers])];
+        existing.reviewers = [
+          ...new Set([
+            ...(existing.reviewers ?? []),
+            ...reviewers
+          ])
+        ];
       }
       return;
     }

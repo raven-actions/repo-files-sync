@@ -21,10 +21,21 @@ jobs:
     name: Build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    # Skip the release commit produced by merging a `chore(release): vX.Y.Z` PR,
-    # so promoting a release never cuts a spurious new RC.
+    # Trust gate. `workflow_run` hands this workflow a privileged token even when
+    # the run that triggered it was an unprivileged pull request from a fork, and
+    # the `branches:` filter above matches the triggering run's HEAD branch name -
+    # which a fork can freely name `main`. Both jobs here check out
+    # `workflow_run.head_sha` and execute code from that checkout (the local
+    # composite action, the build, and the release script), so require a push to
+    # this repository's own default branch before any of it runs.
+    #
+    # Also skip the release commit produced by merging a `chore(release): vX.Y.Z`
+    # PR, so promoting a release never cuts a spurious new RC.
     if: >-
       ${{ github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.head_repository.full_name == github.repository
+      && github.event.workflow_run.head_branch == github.event.repository.default_branch
       && !startsWith(github.event.workflow_run.head_commit.message, 'chore(release)') }}
     permissions:
       contents: read
@@ -68,6 +79,14 @@ jobs:
     needs: [build]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # Defense in depth: `needs: [build]` already keeps this job behind the trust
+    # gate above, but this is the job that holds `contents: write` and imports a
+    # script from the checked-out workspace, so it re-asserts the same trigger
+    # conditions instead of relying on job ordering alone.
+    if: >-
+      ${{ github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.head_repository.full_name == github.repository
+      && github.event.workflow_run.head_branch == github.event.repository.default_branch }}
     permissions:
       contents: write
       pull-requests: read # git-cliff GitHub integration enriches notes with PR data

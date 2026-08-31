@@ -4,6 +4,13 @@
 # behaves the same everywhere.
 * text=auto eol=lf
 
-# Explicitly treat lockfiles and shell scripts as LF text.
-pnpm-lock.yaml text eol=lf
+# Explicitly treat lockfiles and shell scripts as LF text. The lockfile is also
+# marked generated so GitHub collapses it in diffs and leaves it out of the
+# repository's language statistics.
+pnpm-lock.yaml text eol=lf linguist-generated=true
 *.sh text eol=lf
+
+# Windows batch scripts are only valid with CRLF, matching the .editorconfig
+# rule for the same extensions.
+*.cmd text eol=crlf
+*.bat text eol=crlf

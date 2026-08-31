@@ -66,12 +66,14 @@ flowchart TD
 
    > Because version bumping and changelog generation read the squashed commit subject, configure the repository to **allow squash merging only** (Settings -> General -> Pull Requests: enable "Allow squash merging", disable merge commits and rebase merging, and default the squash commit message to the PR title). A stray merge or rebase merge can land non-conventional subjects that break `git cliff --bump` and the notes.
 2. **CI** (`ci.yml`) runs lint, type-check, build, and the cross-OS test matrix.
-3. **Prerelease** (`prerelease.yml`) runs on CI success for `main` (and is skipped for `chore(release)` commits):
+3. **Prerelease** (`prerelease.yml`) runs on CI success for a **push to this repository's own default branch** (and is skipped for `chore(release)` commits):
    - rebuilds `dist/` from the exact tested commit and attaches a signed SLSA build provenance attestation,
    - skips entirely if no version-bumping commits landed (no-op guard),
    - pins the `README.md` usage examples to the RC tag `vX.Y.Z-rc.N`, so the draft/prerelease advertises the exact version a consumer would install from it (the final release re-pins these to the stable `vX.Y.Z` when cut),
    - creates a GitHub-**verified** commit on the `prerelease/vX.Y.Z` branch (curated release files only); this branch tip always points at the latest RC. The branch is an **orphan branch** - it shares no history with `main`, so its commits read as "here are the release artifacts" instead of a commit that deletes the rest of the repository. The CI-tested `main` commit the artifacts were built from is recorded as a `Source-Commit:` trailer in the commit message. A run whose artifacts are byte-identical to the current tip leaves the branch untouched instead of adding an empty commit,
    - overwrites the pending **draft** prerelease `vX.Y.Z-rc.N` (deleting any previous draft RC first), so at most one draft is ever pending and it targets that branch tip.
+
+   > **Why the trigger is gated.** `workflow_run` starts with a privileged token even when the run that triggered it was an unprivileged pull request from a fork, and its `branches:` filter matches the triggering run's *head* branch name - which a fork can freely name `main`. Because both jobs check out `workflow_run.head_sha` and execute code from that checkout, each one requires `workflow_run.event == 'push'`, `head_repository.full_name == github.repository`, and `head_branch == <default branch>`. Keep those conditions on any job added to this workflow, and never run code from an untrusted `head_sha` in a job that holds write permissions.
 
 **Promoting a draft to a real RC.** RCs are never published automatically. When a draft looks good, open it on the **Releases** page and click **Publish release**. That creates the immutable `vX.Y.Z-rc.N` tag at the current `prerelease/vX.Y.Z` branch tip and advances the proposed number for the next draft.
 
@@ -88,7 +90,7 @@ flowchart TD
    - tags `vX.Y.Z` at that commit and marks it `latest`,
    - deletes the `prerelease/vX.Y.Z` and `release-prep/vX.Y.Z` branches.
 
-> The release PR is created by the workflow token, so token-triggered checks (such as `PR Title`) do not re-run on it. The title is correct by construction. If you make those checks required, exclude `release-prep/*` or create the PR with a PAT.
+> The release PR is created by the workflow token, so GitHub does not start `pull_request` workflow runs for it. **Prepare Release** therefore dispatches the **CI** workflow against the `release-prep/vX.Y.Z` branch (`workflow_dispatch` is the one event `GITHUB_TOKEN` is allowed to trigger). Those check runs attach to the branch's head commit - which is the PR's head commit - so the required `Lint`, `Build`, `Type Check` and `Test Check` contexts are satisfied without bypassing the ruleset. `PR Title` still does not run on the release PR; its title is correct by construction, so keep that check out of the required list.
 
 ## Cleaning up orphaned release branches
 

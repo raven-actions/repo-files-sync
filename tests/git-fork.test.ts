@@ -101,7 +101,9 @@ describe('git.ts - fork workflow', () => {
       data: [{ number: 7, html_url: 'https://github.com/target/repo/pull/7', body: null }]
     });
     compareCommitsMock.mockResolvedValue({ data: { ahead_by: 1 } });
-    pullsCreateMock.mockResolvedValue({ data: { number: 8, html_url: 'https://github.com/target/repo/pull/8', body: null } });
+    pullsCreateMock.mockResolvedValue({
+      data: { number: 8, html_url: 'https://github.com/target/repo/pull/8', body: null }
+    });
     execGitMock.mockImplementation((args: string[]) => {
       const command = args.join(' ');
       if (command === 'rev-list -n 1 --all') return Promise.resolve('base-sha');
@@ -119,18 +121,59 @@ describe('git.ts - fork workflow', () => {
     await git.createPrBranch();
     await git.push();
 
-    expect(execGitMock).toHaveBeenCalledWith(['remote', 'set-branches', 'fork', '*'], git.workingDir);
-    expect(execGitMock).toHaveBeenCalledWith(['fetch', '-v', 'fork'], git.workingDir);
-    expect(execGitMock).toHaveBeenCalledWith(['rev-parse', '--verify', 'fork/sync/main'], git.workingDir);
     expect(execGitMock).toHaveBeenCalledWith(
-      ['switch', '--track', '-c', 'sync/main', 'fork/sync/main'],
+      [
+        'remote',
+        'set-branches',
+        'fork',
+        '*'
+      ],
       git.workingDir
     );
-    expect(execGitMock).toHaveBeenCalledWith(['fetch', 'fork', 'sync/main'], git.workingDir);
-    expect(execGitMock).toHaveBeenCalledWith(['push', '-u', 'fork', 'sync/main'], git.workingDir);
-    expect(pullsListMock).toHaveBeenCalledWith(
-      expect.objectContaining({ state: 'open', head: 'sync-bot:sync/main' })
+    expect(execGitMock).toHaveBeenCalledWith(
+      [
+        'fetch',
+        '-v',
+        'fork'
+      ],
+      git.workingDir
     );
+    expect(execGitMock).toHaveBeenCalledWith(
+      [
+        'rev-parse',
+        '--verify',
+        'fork/sync/main'
+      ],
+      git.workingDir
+    );
+    expect(execGitMock).toHaveBeenCalledWith(
+      [
+        'switch',
+        '--track',
+        '-c',
+        'sync/main',
+        'fork/sync/main'
+      ],
+      git.workingDir
+    );
+    expect(execGitMock).toHaveBeenCalledWith(
+      [
+        'fetch',
+        'fork',
+        'sync/main'
+      ],
+      git.workingDir
+    );
+    expect(execGitMock).toHaveBeenCalledWith(
+      [
+        'push',
+        '-u',
+        'fork',
+        'sync/main'
+      ],
+      git.workingDir
+    );
+    expect(pullsListMock).toHaveBeenCalledWith(expect.objectContaining({ state: 'open', head: 'sync-bot:sync/main' }));
   });
 
   it('should clone with full history (no --depth) to safely reconcile a diverged fork branch', async () => {
@@ -157,18 +200,34 @@ describe('git.ts - fork workflow', () => {
     await git.push();
 
     expect(execGitMock).toHaveBeenCalledWith(
-      ['push', '-u', '--force-with-lease=refs/heads/sync/main:fork-head', 'fork', 'sync/main'],
+      [
+        'push',
+        '-u',
+        '--force-with-lease=refs/heads/sync/main:fork-head',
+        'fork',
+        'sync/main'
+      ],
       git.workingDir
     );
   });
 
-  it('should push an empty fork branch name before a PR branch exists', async () => {
+  it('refuses to push to the fork before a PR branch exists', async () => {
     const git = new Git();
     await git.initRepo(repo);
 
-    await git.push();
-
-    expect(execGitMock).toHaveBeenCalledWith(['push', '-u', 'fork', ''], git.workingDir);
+    // Regression guard: this used to run `git push -u fork ""` with an empty
+    // refspec. FORK + SKIP_PR is now rejected in config.ts, and push() refuses
+    // outright rather than handing git a meaningless argument.
+    await expect(git.push()).rejects.toThrow('Cannot push to the fork before the sync branch has been created.');
+    expect(execGitMock).not.toHaveBeenCalledWith(
+      [
+        'push',
+        '-u',
+        'fork',
+        ''
+      ],
+      git.workingDir
+    );
   });
 
   it('should use the fork owner for closed PRs, comparisons, and new PR heads', async () => {
@@ -186,7 +245,9 @@ describe('git.ts - fork workflow', () => {
     expect(await state.isBranchBehindBase('sync/main')).toBe(true);
     const result = await git.createOrUpdatePr('changed');
 
-    expect(pullsListMock).toHaveBeenCalledWith(expect.objectContaining({ state: 'closed', head: 'sync-bot:sync/main' }));
+    expect(pullsListMock).toHaveBeenCalledWith(
+      expect.objectContaining({ state: 'closed', head: 'sync-bot:sync/main' })
+    );
     expect(compareCommitsMock).toHaveBeenCalledWith(expect.objectContaining({ base: 'sync-bot:sync/main' }));
     expect(pullsCreateMock).toHaveBeenCalledWith(expect.objectContaining({ head: 'sync-bot:sync/main' }));
     expect(result.action).toBe('created');

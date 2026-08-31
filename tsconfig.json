@@ -1,8 +1,12 @@
 {
   "compilerOptions": {
     // Language and Environment
-    "target": "ESNext",
-    "lib": ["ESNext"],
+    // Pinned to the JavaScript version the action's Node 24 runtime implements
+    // (see `using: node24` in action.yml and the esbuild target), instead of
+    // ESNext, so tsc cannot accept standard-library APIs that are missing at
+    // runtime. Raise both together with the runtime.
+    "target": "ES2024",
+    "lib": ["ES2024"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
 

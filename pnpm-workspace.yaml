@@ -3,7 +3,10 @@ allowBuilds:
   esbuild: true
 
 overrides:
-  undici: 6.27.0
+  # Deduplicates the two @actions/http-client majors onto a single undici.
+  # Keep at or above 6.28.0: earlier 6.x releases carry GHSA-m8rv-5g2x-5cg5,
+  # GHSA-v3r7-h72x-cjcm and GHSA-8xcm-r25x-g524.
+  undici: 6.28.0
 
 # Delay adopting just-published versions to avoid pulling in broken or yanked
 # releases during install/update (including `pnpm up --latest`).

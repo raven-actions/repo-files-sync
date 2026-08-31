@@ -128,14 +128,15 @@ export function configureTemplateSandbox(enabled: boolean): void {
   originalMemberLookup ??= runtimeModule.memberLookup;
   const baseline = originalMemberLookup;
 
-  runtimeModule.memberLookup = enabled ?
-    (obj: unknown, key: unknown): unknown => {
-      if (typeof key === 'string' && FORBIDDEN_TEMPLATE_KEYS.has(key)) {
-        return undefined;
+  runtimeModule.memberLookup =
+    enabled ?
+      (obj: unknown, key: unknown): unknown => {
+        if (typeof key === 'string' && FORBIDDEN_TEMPLATE_KEYS.has(key)) {
+          return undefined;
+        }
+        return baseline(obj, key);
       }
-      return baseline(obj, key);
-    }
-  : baseline;
+    : baseline;
 }
 
 /**
@@ -301,7 +302,13 @@ export async function resolvePathWithinRoot(root: string, input: string, label: 
   }
 
   try {
-    const [realRoot, realExistingPath] = await Promise.all([fs.realpath(absoluteRoot), fs.realpath(existingPath)]);
+    const [
+      realRoot,
+      realExistingPath
+    ] = await Promise.all([
+      fs.realpath(absoluteRoot),
+      fs.realpath(existingPath)
+    ]);
     if (!isPathWithinRoot(realRoot, realExistingPath)) {
       throw new Error(`${label} path "${input}" escapes the repository root through a symbolic link`);
     }
@@ -359,7 +366,10 @@ function normalizePattern(pattern: string, sourceRoot: string): string {
   return negated ? `!${patternBody}` : patternBody;
 }
 
-function buildMatcher(patterns: string[] | undefined, sourceRoot: string): ((targets: string[]) => boolean) | undefined {
+function buildMatcher(
+  patterns: string[] | undefined,
+  sourceRoot: string
+): ((targets: string[]) => boolean) | undefined {
   if (!patterns || patterns.length === 0) {
     return undefined;
   }
@@ -423,7 +433,16 @@ export function createFilterFunc(
     const basename = path.posix.basename(relative);
     const segments = relative.split('/').filter((segment) => segment.length > 0);
     const ancestors = segments.slice(0, -1).map((_, index) => segments.slice(0, index + 1).join('/'));
-    const candidates = [...new Set([relative, basename, ...segments, ...ancestors].filter((candidate) => candidate.length > 0))];
+    const candidates = [
+      ...new Set(
+        [
+          relative,
+          basename,
+          ...segments,
+          ...ancestors
+        ].filter((candidate) => candidate.length > 0)
+      )
+    ];
 
     if (relative === '..' || relative.startsWith('../')) {
       return true; // Do not filter files outside the source root

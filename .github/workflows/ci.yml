@@ -9,6 +9,11 @@ on:
   pull_request:
     branches:
       - main
+  # Lets Prepare Release run these same required checks against a
+  # `release-prep/*` branch. The release PR is opened with GITHUB_TOKEN, which by
+  # design does not start `pull_request` workflow runs, so without this the PR
+  # could never satisfy the required status checks and would need a bypass.
+  workflow_dispatch:
 
 permissions: {}
 
@@ -28,9 +33,13 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
 
-      # TODO: Re-enable once typescript-eslint supports TypeScript 7.
-      # - name: Run lint command
-      #   run: pnpm lint
+      - name: Run lint command
+        run: pnpm lint
+
+      # Formatting is enforced through the already-required `Lint` check rather
+      # than a new status context, so the ruleset does not need updating.
+      - name: Check formatting
+        run: pnpm format:check
 
   typecheck:
     name: Type Check
