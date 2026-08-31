@@ -198,7 +198,15 @@ describe('git.ts - standard coverage', () => {
 
     await git.add('folder\\file.txt');
 
-    expect(mocks.execGit).toHaveBeenCalledWith(['add', '-f', '--', ':(literal)folder/file.txt'], git.workingDir);
+    expect(mocks.execGit).toHaveBeenCalledWith(
+      [
+        'add',
+        '-f',
+        '--',
+        ':(literal)folder/file.txt'
+      ],
+      git.workingDir
+    );
   });
 
   it('skips cleanup removal when disabled or before initialization', async () => {
@@ -216,7 +224,10 @@ describe('git.ts - standard coverage', () => {
     expect(git.isOneCommitPush()).toBe(true);
     expect(git.originalCommitMessage()).toBe('first');
 
-    mocks.context.payload = { commits: [{}, { message: 'second' }] };
+    mocks.context.payload = { commits: [
+        {},
+        { message: 'second' }
+      ] };
     expect(git.isOneCommitPush()).toBe(false);
     expect(git.originalCommitMessage()).toBe('');
 
@@ -251,7 +262,9 @@ Binary files a/image.png and b/image.png differ`);
   it('retains an empty path for a malformed deletion header without a previous line', () => {
     const git = new Git();
 
-    expect(git.parseGitDiffOutput('diff --git+++ /dev/null\n@@ -1 +0,0 @@\n-gone')).toEqual({ '': '@@ -1 +0,0 @@\n-gone' });
+    expect(git.parseGitDiffOutput('diff --git+++ /dev/null\n@@ -1 +0,0 @@\n-gone')).toEqual({
+      '': '@@ -1 +0,0 @@\n-gone'
+    });
   });
 
   it('fetches, caches, and filters source changes', async () => {
@@ -262,7 +275,8 @@ Binary files a/image.png and b/image.png differ`);
       after: 'after-sha'
     };
     mocks.api.repos.compareCommits.mockResolvedValue({
-      data: `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1 +1 @@\n-a\n+b\n` +
+      data:
+        `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1 +1 @@\n-a\n+b\n` +
         `diff --git a/docs/readme.md b/docs/readme.md\n--- a/docs/readme.md\n+++ b/docs/readme.md\n@@ -1 +1 @@\n-old\n+new`
     });
 
@@ -286,7 +300,9 @@ Binary files a/image.png and b/image.png differ`);
     const git = await initializedGit();
     mocks.execGit.mockImplementation((args: string[]) => {
       if (args[0] === 'diff') {
-        return Promise.resolve('diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-old\n+new');
+        return Promise.resolve(
+          'diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-old\n+new'
+        );
       }
       if (args.join(' ') === 'status --porcelain') return Promise.resolve(' M file.txt ');
       return defaultExec(args);
@@ -306,9 +322,24 @@ Binary files a/image.png and b/image.png differ`);
     expect(await git.status()).toBe('result');
     expect(await git.getCommitMessage('abc')).toBe('result');
 
-    expect(mocks.execGit).toHaveBeenCalledWith(['commit', '-m', 'sync: synced file(s) with owner/repo'], git.workingDir);
+    expect(mocks.execGit).toHaveBeenCalledWith(
+      [
+        'commit',
+        '-m',
+        'sync: synced file(s) with owner/repo'
+      ],
+      git.workingDir
+    );
     expect(mocks.execGit).toHaveBeenCalledWith(['status'], git.workingDir);
-    expect(mocks.execGit).toHaveBeenCalledWith(['log', '-1', '--format=%B', 'abc'], git.workingDir);
+    expect(mocks.execGit).toHaveBeenCalledWith(
+      [
+        'log',
+        '-1',
+        '--format=%B',
+        'abc'
+      ],
+      git.workingDir
+    );
   });
 
   it('extracts a tree id and returns an empty value when the header is absent', async () => {
@@ -334,7 +365,10 @@ Binary files a/image.png and b/image.png differ`);
     const state = internals(git);
     state.prBranch = 'sync/main';
     state.lastCommitSha = 'base-sha';
-    vi.spyOn(git, 'getCommitsToPush').mockResolvedValue(['one', 'two']);
+    vi.spyOn(git, 'getCommitsToPush').mockResolvedValue([
+      'one',
+      'two'
+    ]);
     const createCommit = vi.spyOn(git, 'createGithubCommit').mockImplementation(async (sha) => {
       state.lastCommitSha = `${sha}-remote`;
     });
@@ -394,7 +428,12 @@ Binary files a/image.png and b/image.png differ`);
 
     expect(core.debug).toHaveBeenCalledWith(expect.stringContaining('Remote branch check skipped'));
     expect(mocks.execGit).toHaveBeenCalledWith(
-      ['push', '--force-with-lease', expect.stringContaining('test-token@github.com/test/repo.git'), 'HEAD:refs/heads/sync/main'],
+      [
+        'push',
+        '--force-with-lease',
+        expect.stringContaining('test-token@github.com/test/repo.git'),
+        'HEAD:refs/heads/sync/main'
+      ],
       git.workingDir
     );
   });
@@ -405,7 +444,10 @@ Binary files a/image.png and b/image.png differ`);
     await git.push();
 
     expect(mocks.execGit).toHaveBeenCalledWith(
-      ['push', expect.stringContaining('test-token@github.com/test/repo.git')],
+      [
+        'push',
+        expect.stringContaining('test-token@github.com/test/repo.git')
+      ],
       git.workingDir
     );
   });
@@ -448,7 +490,9 @@ Binary files a/image.png and b/image.png differ`);
 
     state.existingPr.body = '⚠️ This PR is being automatically resynced (2026-01-01T00:00:00.000Z) ⚠️\nbody';
     await git.removePrWarning();
-    expect(mocks.api.pulls.update).toHaveBeenLastCalledWith(expect.objectContaining({ body: expect.not.stringContaining('⚠️') }));
+    expect(mocks.api.pulls.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ body: expect.not.stringContaining('⚠️') })
+    );
   });
 
   it('does not update warnings or metadata without an existing pull request', async () => {
@@ -476,10 +520,30 @@ Binary files a/image.png and b/image.png differ`);
     await git.addPrReviewers(['bob']);
     await git.addPrTeamReviewers(['platform']);
 
-    expect(mocks.api.issues.addLabels).toHaveBeenCalledWith({ owner: 'test', repo: 'repo', issue_number: 8, labels: ['sync'] });
-    expect(mocks.api.issues.addAssignees).toHaveBeenCalledWith({ owner: 'test', repo: 'repo', issue_number: 8, assignees: ['alice'] });
-    expect(mocks.api.pulls.requestReviewers).toHaveBeenCalledWith({ owner: 'test', repo: 'repo', pull_number: 8, reviewers: ['bob'] });
-    expect(mocks.api.pulls.requestReviewers).toHaveBeenCalledWith({ owner: 'test', repo: 'repo', pull_number: 8, team_reviewers: ['platform'] });
+    expect(mocks.api.issues.addLabels).toHaveBeenCalledWith({
+      owner: 'test',
+      repo: 'repo',
+      issue_number: 8,
+      labels: ['sync']
+    });
+    expect(mocks.api.issues.addAssignees).toHaveBeenCalledWith({
+      owner: 'test',
+      repo: 'repo',
+      issue_number: 8,
+      assignees: ['alice']
+    });
+    expect(mocks.api.pulls.requestReviewers).toHaveBeenCalledWith({
+      owner: 'test',
+      repo: 'repo',
+      pull_number: 8,
+      reviewers: ['bob']
+    });
+    expect(mocks.api.pulls.requestReviewers).toHaveBeenCalledWith({
+      owner: 'test',
+      repo: 'repo',
+      pull_number: 8,
+      team_reviewers: ['platform']
+    });
   });
 
   it('enriches user reviewer request failures with actionable guidance', async () => {
@@ -572,6 +636,8 @@ Binary files a/image.png and b/image.png differ`);
     expect(state.lastCommitSha).toBe('commit-sha');
 
     mocks.api.git.createTree.mockRejectedValueOnce(new Error('invalid tree'));
-    await expect(git.createGithubCommit('local-commit')).rejects.toThrow('Cannot create a new GitHub Tree: invalid tree');
+    await expect(git.createGithubCommit('local-commit')).rejects.toThrow(
+      'Cannot create a new GitHub Tree: invalid tree'
+    );
   });
 });

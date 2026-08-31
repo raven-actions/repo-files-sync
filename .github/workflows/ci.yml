@@ -36,6 +36,11 @@ jobs:
       - name: Run lint command
         run: pnpm lint
 
+      # Formatting is enforced through the already-required `Lint` check rather
+      # than a new status context, so the ruleset does not need updating.
+      - name: Check formatting
+        run: pnpm format:check
+
   typecheck:
     name: Type Check
     runs-on: ubuntu-24.04

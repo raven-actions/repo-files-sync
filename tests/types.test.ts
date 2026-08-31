@@ -102,7 +102,11 @@ describe('types.ts - Type Definitions', () => {
         template: false,
         replace: true,
         deleteOrphaned: false,
-        exclude: ['node_modules', '.git', '*.log']
+        exclude: [
+          'node_modules',
+          '.git',
+          '*.log'
+        ]
       };
 
       expect(fileConfig.exclude).toHaveLength(3);
@@ -157,7 +161,10 @@ describe('types.ts - Type Definitions', () => {
         },
         files: [],
         branchSuffix: '',
-        reviewers: ['reviewer1', 'reviewer2']
+        reviewers: [
+          'reviewer1',
+          'reviewer2'
+        ]
       };
 
       expect(repoConfig.reviewers).toHaveLength(2);
@@ -309,7 +316,13 @@ describe('types.ts - Type Definitions', () => {
     });
 
     it('should support various mode values', () => {
-      const modes: GitTreeEntry['mode'][] = ['100644', '100755', '040000', '160000', '120000'];
+      const modes: GitTreeEntry['mode'][] = [
+        '100644',
+        '100755',
+        '040000',
+        '160000',
+        '120000'
+      ];
 
       modes.forEach((mode) => {
         const entry: GitTreeEntry = {
@@ -371,7 +384,15 @@ describe('types.ts - Type Definitions', () => {
         expect(Array.isArray(array)).toBe(true);
       };
 
-      await callback(1, 0, [1, 2, 3]);
+      await callback(
+        1,
+        0,
+        [
+          1,
+          2,
+          3
+        ]
+      );
     });
   });
 

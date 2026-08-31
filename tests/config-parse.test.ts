@@ -61,8 +61,8 @@ describe('config.ts - parseConfig function', () => {
     vi.clearAllMocks();
 
     // Reset mock stores
-    Object.keys(mockInputs).forEach(key => delete mockInputs[key]);
-    Object.keys(mockFileContents).forEach(key => delete mockFileContents[key]);
+    Object.keys(mockInputs).forEach((key) => delete mockInputs[key]);
+    Object.keys(mockFileContents).forEach((key) => delete mockFileContents[key]);
     mockExistsSync.mockReturnValue(false);
 
     // Set required environment
@@ -197,8 +197,8 @@ group:
       const result = await parseConfig();
 
       expect(result).toHaveLength(2);
-      expect(result.map(r => r.repo.name)).toContain('repo1');
-      expect(result.map(r => r.repo.name)).toContain('repo2');
+      expect(result.map((r) => r.repo.name)).toContain('repo1');
+      expect(result.map((r) => r.repo.name)).toContain('repo2');
     });
 
     it('should parse group with newline-separated repos', async () => {
@@ -252,7 +252,10 @@ group:
       const { parseConfig } = await import('../src/config.js');
       const result = await parseConfig();
 
-      expect(result[0]?.reviewers).toEqual(['reviewer1', 'reviewer2']);
+      expect(result[0]?.reviewers).toEqual([
+        'reviewer1',
+        'reviewer2'
+      ]);
     });
 
     it('should parse multiple groups', async () => {
@@ -327,9 +330,16 @@ group:
       const repoB = result.find((r) => r.repo.name === 'repo-b');
 
       // repo-a appears in all three groups => 1 + 1 + 1 files combined
-      expect(repoA?.files.map((f) => f.source)).toEqual(['a1.txt', 'a2.txt', 'shared.txt']);
+      expect(repoA?.files.map((f) => f.source)).toEqual([
+        'a1.txt',
+        'a2.txt',
+        'shared.txt'
+      ]);
       // repo-b appears in two groups => 1 + 1 files combined
-      expect(repoB?.files.map((f) => f.source)).toEqual(['a1.txt', 'shared.txt']);
+      expect(repoB?.files.map((f) => f.source)).toEqual([
+        'a1.txt',
+        'shared.txt'
+      ]);
     });
 
     it('should merge a repo that appears in both a group and a top-level key', async () => {
@@ -349,7 +359,10 @@ group:
 
       // The repo must be processed only once, with files from both sources
       expect(result).toHaveLength(1);
-      expect(result[0]?.files.map((f) => f.source).sort()).toEqual(['in-group.txt', 'top-level.txt']);
+      expect(result[0]?.files.map((f) => f.source).sort()).toEqual([
+        'in-group.txt',
+        'top-level.txt'
+      ]);
     });
 
     it('should keep the same repo separate when branchSuffix differs', async () => {
@@ -373,7 +386,10 @@ group:
 
       // Different branchSuffix targets different branches/PRs => not merged
       expect(result).toHaveLength(2);
-      expect(result.map((r) => r.branchSuffix).sort()).toEqual(['alpha', 'beta']);
+      expect(result.map((r) => r.branchSuffix).sort()).toEqual([
+        'alpha',
+        'beta'
+      ]);
     });
 
     it('should merge reviewers when a repo appears in multiple groups', async () => {
@@ -401,7 +417,11 @@ group:
 
       expect(result).toHaveLength(1);
       // Reviewers are unioned and de-duplicated
-      expect(result[0]?.reviewers?.sort()).toEqual(['alice', 'bob', 'carol']);
+      expect(result[0]?.reviewers?.sort()).toEqual([
+        'alice',
+        'bob',
+        'carol'
+      ]);
     });
 
     it('should add reviewers when an earlier group had none', async () => {
@@ -532,7 +552,10 @@ group:
       const { parseConfig } = await import('../src/config.js');
       const result = await parseConfig();
 
-      expect(result.map((r) => r.repo.name)).toEqual(['alpha', 'gamma']);
+      expect(result.map((r) => r.repo.name)).toEqual([
+        'alpha',
+        'gamma'
+      ]);
     });
 
     it('should ignore requested repos that are not in the config (no error)', async () => {
@@ -708,7 +731,7 @@ user/repo@main:
 describe('config.ts - context initialization', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    Object.keys(mockInputs).forEach(key => delete mockInputs[key]);
+    Object.keys(mockInputs).forEach((key) => delete mockInputs[key]);
     mockExistsSync.mockReturnValue(false);
     process.env['GITHUB_SERVER_URL'] = 'https://github.com';
   });
@@ -760,6 +783,39 @@ describe('config.ts - context initialization', () => {
     } finally {
       exitSpy.mockRestore();
     }
+  });
+
+  it('should fail initialization when FORK is combined with SKIP_PR', async () => {
+    mockInputs['GH_TOKEN'] = 'ghp_my-pat-token';
+    mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
+    mockInputs['FORK'] = 'sync-bot';
+    mockInputs['SKIP_PR'] = 'true';
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit(1)');
+    }) as typeof process.exit);
+
+    try {
+      await expect(import('../src/config.js')).rejects.toThrow('process.exit(1)');
+      expect(core.setFailed).toHaveBeenCalledWith(
+        'FORK cannot be combined with SKIP_PR: a fork-based sync has to open a pull request against the target repository. Unset one of them.'
+      );
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    } finally {
+      exitSpy.mockRestore();
+    }
+  });
+
+  it('should allow FORK without SKIP_PR', async () => {
+    mockInputs['GH_TOKEN'] = 'ghp_my-pat-token';
+    mockInputs['GITHUB_REPOSITORY'] = 'owner/repo';
+    mockInputs['FORK'] = 'sync-bot';
+    mockFileContents['.github/sync.yml'] = 'user/repo:\n  - file.txt';
+
+    const config = await import('../src/config.js');
+
+    expect(config.default.FORK).toBe('sync-bot');
+    expect(config.default.SKIP_PR).toBe(false);
   });
 
   it('should initialize an installation token when GIT_EMAIL/GIT_USERNAME are provided', async () => {
@@ -887,7 +943,11 @@ describe('config.ts - context initialization', () => {
 
     const config = await import('../src/config.js');
 
-    expect(config.default.PR_LABELS).toEqual(['label1', 'label2', 'label3']);
+    expect(config.default.PR_LABELS).toEqual([
+      'label1',
+      'label2',
+      'label3'
+    ]);
   });
 
   it('should set boolean options from input', async () => {

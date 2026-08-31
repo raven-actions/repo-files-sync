@@ -60,13 +60,19 @@ describe('config.ts - Configuration Parsing', () => {
   describe('YAML Configuration Structure', () => {
     it('should validate simple repo config structure', () => {
       const config = {
-        'user/repo': ['file1.txt', 'file2.txt']
+        'user/repo': [
+          'file1.txt',
+          'file2.txt'
+        ]
       };
 
       const yamlStr = yaml.dump(config);
       const parsed = yaml.load(yamlStr) as Record<string, unknown>;
 
-      expect(parsed['user/repo']).toEqual(['file1.txt', 'file2.txt']);
+      expect(parsed['user/repo']).toEqual([
+        'file1.txt',
+        'file2.txt'
+      ]);
     });
 
     it('should validate repo config with branch', () => {
@@ -142,14 +148,20 @@ describe('config.ts - Configuration Parsing', () => {
         group: {
           repos: ['user/repo'],
           files: ['file.txt'],
-          reviewers: ['reviewer1', 'reviewer2']
+          reviewers: [
+            'reviewer1',
+            'reviewer2'
+          ]
         }
       };
 
       const yamlStr = yaml.dump(config);
       const parsed = yaml.load(yamlStr) as { group: { reviewers: string[] } };
 
-      expect(parsed.group.reviewers).toEqual(['reviewer1', 'reviewer2']);
+      expect(parsed.group.reviewers).toEqual([
+        'reviewer1',
+        'reviewer2'
+      ]);
     });
 
     it('should validate group with branchSuffix', () => {
@@ -181,10 +193,7 @@ describe('config.ts - Configuration Parsing', () => {
       };
 
       const yamlStr = yaml.dump(config);
-      const parsed = yaml.load(yamlStr) as Record<
-        string,
-        Array<{ template: { name: string; version: string } }>
-      >;
+      const parsed = yaml.load(yamlStr) as Record<string, Array<{ template: { name: string; version: string } }>>;
 
       expect(parsed['user/repo']?.[0]?.template).toEqual({
         name: 'Test',
@@ -287,14 +296,21 @@ describe('config.ts - Configuration Parsing', () => {
       const excludeText = 'node_modules\n.git\n*.log';
       const patterns = excludeText.split('\n').filter((line) => line);
 
-      expect(patterns).toEqual(['node_modules', '.git', '*.log']);
+      expect(patterns).toEqual([
+        'node_modules',
+        '.git',
+        '*.log'
+      ]);
     });
 
     it('should filter empty lines', () => {
       const excludeText = 'file1\n\nfile2\n';
       const patterns = excludeText.split('\n').filter((line) => line);
 
-      expect(patterns).toEqual(['file1', 'file2']);
+      expect(patterns).toEqual([
+        'file1',
+        'file2'
+      ]);
     });
 
     it('should return undefined for undefined input', () => {
@@ -313,11 +329,18 @@ describe('config.ts - Configuration Parsing', () => {
         .map((n) => n.trim())
         .filter((n) => n);
 
-      expect(repos).toEqual(['user/repo1', 'user/repo2', 'user/repo3']);
+      expect(repos).toEqual([
+        'user/repo1',
+        'user/repo2',
+        'user/repo3'
+      ]);
     });
 
     it('should handle array repos', () => {
-      const repos = ['user/repo1', 'user/repo2'];
+      const repos = [
+        'user/repo1',
+        'user/repo2'
+      ];
 
       expect(repos).toHaveLength(2);
     });
@@ -329,7 +352,10 @@ describe('config.ts - Configuration Parsing', () => {
         .map((n) => n.trim())
         .filter((n) => n);
 
-      expect(repos).toEqual(['user/repo1', 'user/repo2']);
+      expect(repos).toEqual([
+        'user/repo1',
+        'user/repo2'
+      ]);
     });
   });
 

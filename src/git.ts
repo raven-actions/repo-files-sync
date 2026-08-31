@@ -212,13 +212,24 @@ export default class Git {
   }
 
   async createRemote(forkUrl: string): Promise<string> {
-    return execGit(['remote', 'add', 'fork', forkUrl], this.workingDir);
+    return execGit(
+      [
+        'remote',
+        'add',
+        'fork',
+        forkUrl
+      ],
+      this.workingDir
+    );
   }
 
   async clone(): Promise<string> {
     core.debug(`Cloning ${this.repo.fullName} into ${this.workingDir}`);
 
-    const branchArgs = this.repo.branch !== 'default' ? ['--branch', this.repo.branch] : [];
+    const branchArgs = this.repo.branch !== 'default' ? [
+          '--branch',
+          this.repo.branch
+        ] : [];
 
     // The FORK workflow later has to reconcile this clone's history against a
     // separate, potentially-diverged fork remote (e.g. after an upstream PR
@@ -227,7 +238,10 @@ export default class Git {
     // clone with full history whenever FORK is set; non-fork syncs keep the
     // cheaper shallow clone. See
     // https://github.com/BetaHuhn/repo-file-sync-action/issues/270.
-    const depthArgs = FORK ? [] : ['--depth', '1'];
+    const depthArgs = FORK ? [] : [
+          '--depth',
+          '1'
+        ];
 
     // `--` stops option parsing before the positional <repository> and
     // <directory> arguments (both documented as `git clone [--] <repository>
@@ -235,29 +249,67 @@ export default class Git {
     // input, so without this guard a value starting with `-` (e.g.
     // `--upload-pack=...`) could be misread as a git option instead of the
     // destination path.
-    return execGit(['clone', ...depthArgs, ...branchArgs, '--', this.gitUrl, this.workingDir]);
+    return execGit([
+      'clone',
+      ...depthArgs,
+      ...branchArgs,
+      '--',
+      this.gitUrl,
+      this.workingDir
+    ]);
   }
 
   async setIdentity(): Promise<string> {
     let username = GIT_USERNAME;
     let email = GIT_EMAIL;
 
-    if (email === undefined) {
-      if (!IS_INSTALLATION_TOKEN) {
-        const { data } = await this.github.users.getAuthenticated();
-        email = data.email ?? undefined;
-        username = data.login;
-      }
+    // Only a PAT maps to a real user account that can be looked up. An
+    // installation token does not, and config.ts already requires GIT_EMAIL and
+    // GIT_USERNAME in that case. Resolve whichever value is still missing, and
+    // never overwrite one the workflow set explicitly.
+    if ((username === undefined || email === undefined) && !IS_INSTALLATION_TOKEN) {
+      const { data } = await this.github.users.getAuthenticated();
+
+      username ??= data.login;
+      // GitHub keeps account emails private by default, so `data.email` is
+      // frequently null. Fall back to the account's noreply address - the same
+      // form GitHub itself uses for web commits, so the commit still links back
+      // to the account - instead of committing as the literal string
+      // "undefined". See https://github.com/BetaHuhn/repo-file-sync-action/issues/354.
+      email ??= data.email ?? `${data.id}+${data.login}@users.noreply.${new URL(GITHUB_SERVER_URL).host}`;
     }
 
     core.debug(`Setting git user to email: ${email}, username: ${username}`);
 
-    await execGit(['config', '--local', 'user.name', String(username)], this.workingDir);
-    return execGit(['config', '--local', 'user.email', String(email)], this.workingDir);
+    await execGit(
+      [
+        'config',
+        '--local',
+        'user.name',
+        String(username)
+      ],
+      this.workingDir
+    );
+    return execGit(
+      [
+        'config',
+        '--local',
+        'user.email',
+        String(email)
+      ],
+      this.workingDir
+    );
   }
 
   async getBaseBranch(): Promise<void> {
-    this.baseBranch = await execGit(['rev-parse', '--abbrev-ref', 'HEAD'], this.workingDir);
+    this.baseBranch = await execGit(
+      [
+        'rev-parse',
+        '--abbrev-ref',
+        'HEAD'
+      ],
+      this.workingDir
+    );
   }
 
   async createPrBranch(branchSuffix = ''): Promise<void> {
@@ -276,7 +328,14 @@ export default class Git {
 
       core.debug(`Creating PR Branch ${newBranch}`);
 
-      await execGit(['switch', '-c', newBranch], this.workingDir);
+      await execGit(
+        [
+          'switch',
+          '-c',
+          newBranch
+        ],
+        this.workingDir
+      );
       return;
     }
 
@@ -287,16 +346,39 @@ export default class Git {
     // Fetch all branches.
     // Use execGit (no shell) so the `*` refspec isn't mangled by cmd.exe on Windows
     // runners, where single quotes are not stripped.
-    await execGit(['remote', 'set-branches', branchRemote, '*'], this.workingDir);
+    await execGit(
+      [
+        'remote',
+        'set-branches',
+        branchRemote,
+        '*'
+      ],
+      this.workingDir
+    );
     // The fork remote's branch may have diverged from origin's history (e.g.
     // after an upstream PR merges), so fetching it shallow can hit "shallow
     // update not allowed". The local clone already has full history in that
     // case (see clone()), so only origin's own fetch stays shallow.
-    const fetchArgs = branchRemote === 'origin' ? ['fetch', '-v', '--depth=1'] : ['fetch', '-v', branchRemote];
+    const fetchArgs = branchRemote === 'origin' ? [
+          'fetch',
+          '-v',
+          '--depth=1'
+        ] : [
+          'fetch',
+          '-v',
+          branchRemote
+        ];
     await execGit(fetchArgs, this.workingDir);
 
     try {
-      this.remoteBranchHead = await execGit(['rev-parse', '--verify', `${branchRemote}/${newBranch}`], this.workingDir);
+      this.remoteBranchHead = await execGit(
+        [
+          'rev-parse',
+          '--verify',
+          `${branchRemote}/${newBranch}`
+        ],
+        this.workingDir
+      );
     } catch {
       core.debug(`No existing remote branch for ${newBranch}`);
       this.remoteBranchHead = undefined;
@@ -316,13 +398,22 @@ export default class Git {
       // The previous sync PR was closed and no PR is currently open. Rebuild the
       // branch from the base tip and reopen that PR instead of deleting the
       // branch (which orphaned it) or creating a duplicate.
-      core.info(`Found closed PR #${closedPr.number} for branch ${newBranch} and no open PR, rebuilding the branch and reopening the PR`);
+      core.info(
+        `Found closed PR #${closedPr.number} for branch ${newBranch} and no open PR, rebuilding the branch and reopening the PR`
+      );
       this.existingPr = closedPr;
       this.reopenClosedPr = true;
 
       // Rebuild the PR branch from the base tip; push() force-updates it so the
       // reopened PR always reflects a fresh sync on top of the latest base.
-      await execGit(['switch', '-C', newBranch], this.workingDir);
+      await execGit(
+        [
+          'switch',
+          '-C',
+          newBranch
+        ],
+        this.workingDir
+      );
       this.forceUpdateBranch = true;
     } else if (REBASE && this.remoteBranchHead && (await this.isBranchBehindBase(newBranch))) {
       // REBASE: keep an existing sync PR up to date with the base branch
@@ -331,23 +422,63 @@ export default class Git {
       // top. The branch is then force-updated (see push()), so the same PR is
       // reused but always rebased onto the latest base.
       core.info(`PR branch ${newBranch} is behind ${this.baseBranch}, rebasing onto the latest base`);
-      await execGit(['switch', '-C', newBranch], this.workingDir);
+      await execGit(
+        [
+          'switch',
+          '-C',
+          newBranch
+        ],
+        this.workingDir
+      );
       this.forceUpdateBranch = true;
     } else if (this.remoteBranchHead) {
-      await execGit(['switch', '--track', '-c', newBranch, `${branchRemote}/${newBranch}`], this.workingDir);
+      await execGit(
+        [
+          'switch',
+          '--track',
+          '-c',
+          newBranch,
+          `${branchRemote}/${newBranch}`
+        ],
+        this.workingDir
+      );
     } else {
-      await execGit(['switch', '-c', newBranch], this.workingDir);
+      await execGit(
+        [
+          'switch',
+          '-c',
+          newBranch
+        ],
+        this.workingDir
+      );
     }
 
     await this.getLastCommitSha();
   }
 
   async add(file: string): Promise<string> {
-    return execGit(['add', '-f', '--', Git.literalPathspec(file)], this.workingDir);
+    return execGit(
+      [
+        'add',
+        '-f',
+        '--',
+        Git.literalPathspec(file)
+      ],
+      this.workingDir
+    );
   }
 
   async remove(file: string): Promise<string> {
-    return execGit(['rm', '-r', '-f', '--', Git.literalPathspec(file)], this.workingDir);
+    return execGit(
+      [
+        'rm',
+        '-r',
+        '-f',
+        '--',
+        Git.literalPathspec(file)
+      ],
+      this.workingDir
+    );
   }
 
   async cleanupRepo(repo: RepoInfo, removeWorkingDir = true): Promise<void> {
@@ -448,7 +579,13 @@ export default class Git {
   }
 
   async getLastCommitSha(): Promise<void> {
-    this.lastCommitSha = await execGit(['rev-parse', 'HEAD'], this.workingDir);
+    this.lastCommitSha = await execGit(
+      [
+        'rev-parse',
+        'HEAD'
+      ],
+      this.workingDir
+    );
   }
 
   /**
@@ -457,7 +594,15 @@ export default class Git {
    * sha or nothing when the repository has no commits yet.
    */
   private async hasNoCommits(): Promise<boolean> {
-    const output = await execGit(['rev-list', '-n', '1', '--all'], this.workingDir);
+    const output = await execGit(
+      [
+        'rev-list',
+        '-n',
+        '1',
+        '--all'
+      ],
+      this.workingDir
+    );
     return output.trim().length === 0;
   }
 
@@ -465,18 +610,39 @@ export default class Git {
    * Gets array of git diffs for the destination, which can be a file or directory
    */
   async changes(destination: string): Promise<string[]> {
-    const output = await execGit(['diff', 'HEAD', '--', Git.literalPathspec(destination)], this.workingDir);
+    const output = await execGit(
+      [
+        'diff',
+        'HEAD',
+        '--',
+        Git.literalPathspec(destination)
+      ],
+      this.workingDir
+    );
     return Object.values(this.parseGitDiffOutput(output));
   }
 
   async hasChanges(): Promise<boolean> {
-    const statusOutput = await execGit(['status', '--porcelain'], this.workingDir);
+    const statusOutput = await execGit(
+      [
+        'status',
+        '--porcelain'
+      ],
+      this.workingDir
+    );
     // Non-empty output means there are changes
     return statusOutput.trim().length > 0;
   }
 
   async hasStagedChanges(): Promise<boolean> {
-    const output = await execGit(['diff', '--cached', '--name-only'], this.workingDir);
+    const output = await execGit(
+      [
+        'diff',
+        '--cached',
+        '--name-only'
+      ],
+      this.workingDir
+    );
     return output.trim().length > 0;
   }
 
@@ -487,7 +653,14 @@ export default class Git {
       message += `\n\n${COMMIT_BODY}`;
     }
 
-    return execGit(['commit', '-m', message], this.workingDir);
+    return execGit(
+      [
+        'commit',
+        '-m',
+        message
+      ],
+      this.workingDir
+    );
   }
 
   /**
@@ -496,7 +669,16 @@ export default class Git {
   async getTreeId(commitSha: string): Promise<string> {
     core.debug(`Getting treeId for commit ${commitSha}`);
 
-    const output = (await execGit(['cat-file', '-p', commitSha], this.workingDir)).split('\n');
+    const output = (
+      await execGit(
+        [
+          'cat-file',
+          '-p',
+          commitSha
+        ],
+        this.workingDir
+      )
+    ).split('\n');
 
     const commitHeaders = output.slice(
       0,
@@ -509,7 +691,14 @@ export default class Git {
 
   async getTreeDiff(referenceTreeId: string, differenceTreeId: string): Promise<TreeDiffEntry[]> {
     const output = await execGit(
-      ['diff-tree', '-r', '-z', '--no-commit-id', referenceTreeId, differenceTreeId],
+      [
+        'diff-tree',
+        '-r',
+        '-z',
+        '--no-commit-id',
+        referenceTreeId,
+        differenceTreeId
+      ],
       this.workingDir,
       false
     );
@@ -524,9 +713,13 @@ export default class Git {
         continue;
       }
 
-      const [newMode = '', previousMode = '', newBlob = '', previousBlob = '', change = ''] = metadata
-        .replace(/^:/, '')
-        .split(' ');
+      const [
+        newMode = '',
+        previousMode = '',
+        newBlob = '',
+        previousBlob = '',
+        change = ''
+      ] = metadata.replace(/^:/, '').split(' ');
 
       entries.push({ newMode, previousMode, newBlob, previousBlob, change, path: filePath });
     }
@@ -540,7 +733,14 @@ export default class Git {
   async uploadGitHubBlob(blob: string): Promise<void> {
     core.debug(`Uploading GitHub Blob for blob ${blob}`);
 
-    const fileContent = await execGitBuffer(['cat-file', '-p', blob], this.workingDir);
+    const fileContent = await execGitBuffer(
+      [
+        'cat-file',
+        '-p',
+        blob
+      ],
+      this.workingDir
+    );
 
     await this.github.git.createBlob({
       owner: this.repo.user,
@@ -557,12 +757,28 @@ export default class Git {
    * commits on an existing PR branch are not available.
    */
   async getCommitsToPush(): Promise<string[]> {
-    const output = await execGit(['log', '--format=%H', '--reverse', `${this.lastCommitSha}..HEAD`], this.workingDir);
+    const output = await execGit(
+      [
+        'log',
+        '--format=%H',
+        '--reverse',
+        `${this.lastCommitSha}..HEAD`
+      ],
+      this.workingDir
+    );
     return output.split('\n').filter(Boolean);
   }
 
   async getCommitMessage(commitSha: string): Promise<string> {
-    return execGit(['log', '-1', '--format=%B', commitSha], this.workingDir);
+    return execGit(
+      [
+        'log',
+        '-1',
+        '--format=%B',
+        commitSha
+      ],
+      this.workingDir
+    );
   }
 
   /**
@@ -664,8 +880,22 @@ export default class Git {
       const branchRemote = this.branchRemote();
 
       try {
-        await execGit(['fetch', branchRemote, targetBranch], this.workingDir);
-        currentRemoteHead = await execGit(['rev-parse', '--verify', `${branchRemote}/${targetBranch}`], this.workingDir);
+        await execGit(
+          [
+            'fetch',
+            branchRemote,
+            targetBranch
+          ],
+          this.workingDir
+        );
+        currentRemoteHead = await execGit(
+          [
+            'rev-parse',
+            '--verify',
+            `${branchRemote}/${targetBranch}`
+          ],
+          this.workingDir
+        );
       } catch (error) {
         core.debug(`Remote branch check skipped: ${String(error)}`);
       }
@@ -681,8 +911,24 @@ export default class Git {
     await this.maybeReopenClosedPr();
 
     if (FORK) {
-      const forceArgs = this.forceUpdateBranch && this.prBranch ? [this.forceWithLeaseArg(this.prBranch)] : [];
-      return execGit(['push', '-u', ...forceArgs, 'fork', this.prBranch ?? ''], this.workingDir);
+      // SKIP_PR leaves no sync branch to push, and config.ts rejects that
+      // combination up front; guard here too so a future caller can never fall
+      // back to pushing an empty refspec (`git push -u fork ""`).
+      if (!this.prBranch) {
+        throw new Error('Cannot push to the fork before the sync branch has been created.');
+      }
+
+      const forceArgs = this.forceUpdateBranch ? [this.forceWithLeaseArg(this.prBranch)] : [];
+      return execGit(
+        [
+          'push',
+          '-u',
+          ...forceArgs,
+          'fork',
+          this.prBranch
+        ],
+        this.workingDir
+      );
     }
 
     if (IS_INSTALLATION_TOKEN) {
@@ -691,12 +937,23 @@ export default class Git {
 
     if (this.forceUpdateBranch && this.prBranch) {
       return execGit(
-        ['push', this.forceWithLeaseArg(this.prBranch), this.gitUrl, `HEAD:refs/heads/${this.prBranch}`],
+        [
+          'push',
+          this.forceWithLeaseArg(this.prBranch),
+          this.gitUrl,
+          `HEAD:refs/heads/${this.prBranch}`
+        ],
         this.workingDir
       );
     }
 
-    return execGit(['push', this.gitUrl], this.workingDir);
+    return execGit(
+      [
+        'push',
+        this.gitUrl
+      ],
+      this.workingDir
+    );
   }
 
   async findExistingPr(): Promise<PullRequestInfo | undefined> {

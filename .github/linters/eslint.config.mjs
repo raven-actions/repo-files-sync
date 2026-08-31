@@ -83,7 +83,8 @@ export default defineConfig(
       eqeqeq: [
         'error',
         'always',
-        { null: 'ignore' }],
+        { null: 'ignore' }
+      ],
       'no-implicit-coercion': [
         'error',
         {
@@ -116,7 +117,8 @@ export default defineConfig(
       'no-delete-var': 'error',
       'no-unused-vars': [
         'error',
-        { varsIgnorePattern: '^_', argsIgnorePattern: '^_' }],
+        { varsIgnorePattern: '^_', argsIgnorePattern: '^_' }
+      ],
       'no-undef-init': 'error',
 
       // Non-formatting stylistic rules (won't conflict with Prettier)
@@ -124,7 +126,8 @@ export default defineConfig(
       'no-lonely-if': 'error',
       camelcase: [
         'error',
-        { properties: 'never' }],
+        { properties: 'never' }
+      ],
       'no-nested-ternary': 'error',
       'one-var': [
         'error',
@@ -151,7 +154,8 @@ export default defineConfig(
       // Other
       'no-empty': [
         'error',
-        { allowEmptyCatch: true }],
+        { allowEmptyCatch: true }
+      ],
       'no-labels': 'error',
       'no-useless-catch': 'error',
       'no-misleading-character-class': 'error',
@@ -177,7 +181,8 @@ export default defineConfig(
           'no-unused-vars': 'off',
           '@typescript-eslint/no-unused-vars': [
             'error',
-            { varsIgnorePattern: '^_', argsIgnorePattern: '^_' }],
+            { varsIgnorePattern: '^_', argsIgnorePattern: '^_' }
+          ],
           '@typescript-eslint/no-explicit-any': 'warn',
           '@typescript-eslint/explicit-function-return-type': 'off',
           '@typescript-eslint/no-non-null-assertion': 'off',

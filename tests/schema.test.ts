@@ -51,17 +51,32 @@ describe('sync.schema.json', () => {
 
   describe('valid configurations are accepted', () => {
     const validConfigs: Record<string, unknown[]> = {
-      'repo-keyed simple file list': [{ 'owner/repo': ['LICENSE', '.github/workflows/ci.yml'] }],
-      'repo with branch and detailed file': [{ 'owner/repo@main': [{ source: 'src/', dest: 'lib/', deleteOrphaned: true }] }],
+      'repo-keyed simple file list': [{ 'owner/repo': [
+            'LICENSE',
+            '.github/workflows/ci.yml'
+          ] }],
+      'repo with branch and detailed file': [
+        { 'owner/repo@main': [{ source: 'src/', dest: 'lib/', deleteOrphaned: true }] }
+      ],
       'template boolean': [{ 'owner/repo': [{ source: 't/README.md', dest: 'README.md', template: true }] }],
-      'template object': [{ 'owner/repo': [{ source: 'c.json', dest: 'c.json', template: { appName: 'X', version: '1.0.0' } }] }],
-      'include and exclude': [{ 'owner/repo': [{ source: 'src/', dest: 'lib/', exclude: 'node_modules\n*.log', include: '**/*.ts' }] }],
+      'template object': [
+        { 'owner/repo': [{ source: 'c.json', dest: 'c.json', template: { appName: 'X', version: '1.0.0' } }] }
+      ],
+      'include and exclude': [
+        { 'owner/repo': [{ source: 'src/', dest: 'lib/', exclude: 'node_modules\n*.log', include: '**/*.ts' }] }
+      ],
       'replace false': [{ 'owner/repo': [{ source: 'c.json', replace: false }] }],
       'single group': [{ group: { repos: 'o/r1\no/r2', files: ['LICENSE'] } }],
       'group array with reviewers and branchSuffix': [
         {
           group: [
-            { repos: ['o/r1', 'o/r2'], files: ['LICENSE'], reviewers: ['a', 'b'] },
+            { repos: [
+                'o/r1',
+                'o/r2'
+              ], files: ['LICENSE'], reviewers: [
+                'a',
+                'b'
+              ] },
             { repos: ['o/r3'], files: ['.gitignore'], branchSuffix: 'gi' }
           ]
         }
@@ -69,13 +84,18 @@ describe('sync.schema.json', () => {
       'custom host URL key': [{ 'https://github.example.com/owner/repo@main': ['LICENSE'] }]
     };
 
-    Object.entries(validConfigs).forEach(([name, [config]]) => {
-      it(name, () => {
-        const valid = validate(config);
-        expect(validate.errors ?? []).toEqual([]);
-        expect(valid).toBe(true);
-      });
-    });
+    Object.entries(validConfigs).forEach(
+      ([
+        name,
+        [config]
+      ]) => {
+        it(name, () => {
+          const valid = validate(config);
+          expect(validate.errors ?? []).toEqual([]);
+          expect(valid).toBe(true);
+        });
+      }
+    );
   });
 
   describe('invalid configurations are rejected', () => {
@@ -92,11 +112,16 @@ describe('sync.schema.json', () => {
       'quoted destructive boolean': [{ 'owner/repo': [{ source: 'x', deleteOrphaned: 'false' }] }]
     };
 
-    Object.entries(invalidConfigs).forEach(([name, [config]]) => {
-      it(name, () => {
-        expect(validate(config)).toBe(false);
-      });
-    });
+    Object.entries(invalidConfigs).forEach(
+      ([
+        name,
+        [config]
+      ]) => {
+        it(name, () => {
+          expect(validate(config)).toBe(false);
+        });
+      }
+    );
   });
 
   describe('stays in sync with the parser (src/config.ts)', () => {

@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as os from 'os';
 
+// Same suite as git-identity.test.ts, but with GIT_EMAIL configured and
+// GIT_USERNAME left unset. `git.ts` destructures its config at import time, so a
+// different combination needs its own module registry - matching the pattern
+// already used by git-fork/git-rebase/git-no-overwrite.
 const mocks = vi.hoisted(() => ({
   execGit: vi.fn(),
   getAuthenticated: vi.fn()
@@ -33,7 +37,7 @@ vi.mock('../src/config.js', () => ({
     IS_INSTALLATION_TOKEN: false,
     IS_FINE_GRAINED: false,
     GIT_USERNAME: undefined,
-    GIT_EMAIL: undefined,
+    GIT_EMAIL: 'configured@example.com',
     TMP_DIR: os.tmpdir(),
     COMMIT_BODY: '',
     COMMIT_PREFIX: '',
@@ -76,13 +80,15 @@ beforeEach(() => {
   });
 });
 
-describe('git.ts - authenticated identity', () => {
-  it('uses the authenticated login and email when identity is not configured', async () => {
-    mocks.getAuthenticated.mockResolvedValue({ data: { login: 'octocat', email: 'octocat@example.com' } });
+describe('git.ts - partially configured identity', () => {
+  it('keeps the configured email and resolves only the missing username', async () => {
+    mocks.getAuthenticated.mockResolvedValue({ data: { login: 'octocat', email: 'ignored@example.com', id: 1 } });
     const git = new Git();
 
     await git.initRepo(repo);
 
+    // Regression guard: GIT_EMAIL alone used to skip the lookup entirely, which
+    // configured the literal string "undefined" as user.name.
     expect(mocks.execGit).toHaveBeenCalledWith(
       [
         'config',
@@ -97,42 +103,15 @@ describe('git.ts - authenticated identity', () => {
         'config',
         '--local',
         'user.email',
-        'octocat@example.com'
+        'configured@example.com'
       ],
       git.workingDir
     );
-  });
-
-  it('falls back to the account noreply address when the authenticated email is private', async () => {
-    mocks.getAuthenticated.mockResolvedValue({ data: { login: 'octocat', email: null, id: 583231 } });
-    const git = new Git();
-
-    await git.initRepo(repo);
-
-    expect(mocks.execGit).toHaveBeenCalledWith(
-      [
-        'config',
-        '--local',
-        'user.name',
-        'octocat'
-      ],
-      git.workingDir
-    );
-    expect(mocks.execGit).toHaveBeenCalledWith(
-      [
-        'config',
-        '--local',
-        'user.email',
-        '583231+octocat@users.noreply.github.com'
-      ],
-      git.workingDir
-    );
-    // Regression guard: this used to configure the literal string "undefined".
     expect(mocks.execGit).not.toHaveBeenCalledWith(
       [
         'config',
         '--local',
-        'user.email',
+        'user.name',
         'undefined'
       ],
       git.workingDir

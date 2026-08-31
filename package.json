@@ -66,6 +66,7 @@
     "build:watch": "tsc --watch",
     "compile": "tsc",
     "format": "syncpack format && prettier --config ./.github/linters/.prettierrc.yml --write \"./**/*.{js,cjs,mjs,ts,tsx,jsx,json}\"",
+    "format:check": "prettier --config ./.github/linters/.prettierrc.yml --check \"./**/*.{js,cjs,mjs,ts,tsx,jsx,json}\"",
     "lint": "eslint . --config ./.github/linters/eslint.config.mjs",
     "start": "node dist/index.mjs",
     "test": "vitest run",

@@ -95,7 +95,10 @@ describe('helpers.ts', () => {
 
     it('should apply negated include patterns to the full pattern set', () => {
       const root = path.join(testDir, 'negated-include');
-      const filter = createFilterFunc(root, undefined, ['src/**', '!./src/generated/**']);
+      const filter = createFilterFunc(root, undefined, [
+        'src/**',
+        '!./src/generated/**'
+      ]);
 
       expect(filter(path.join(root, 'src', 'index.ts'))).toBe(true);
       expect(filter(path.join(root, 'src', 'generated', 'client.ts'))).toBe(false);
@@ -168,18 +171,30 @@ describe('helpers.ts', () => {
 
   describe('forEach', () => {
     it('should process array items sequentially', async () => {
-      const items = [1, 2, 3];
+      const items = [
+        1,
+        2,
+        3
+      ];
       const results: number[] = [];
 
       await forEach(items, async (item) => {
         results.push(item);
       });
 
-      expect(results).toEqual([1, 2, 3]);
+      expect(results).toEqual([
+        1,
+        2,
+        3
+      ]);
     });
 
     it('should pass correct index and array to callback', async () => {
-      const items = ['a', 'b', 'c'];
+      const items = [
+        'a',
+        'b',
+        'c'
+      ];
       const indices: number[] = [];
       const arrays: string[][] = [];
 
@@ -188,8 +203,16 @@ describe('helpers.ts', () => {
         arrays.push([...array]);
       });
 
-      expect(indices).toEqual([0, 1, 2]);
-      expect(arrays[0]).toEqual(['a', 'b', 'c']);
+      expect(indices).toEqual([
+        0,
+        1,
+        2
+      ]);
+      expect(arrays[0]).toEqual([
+        'a',
+        'b',
+        'c'
+      ]);
     });
 
     it('should handle empty array', async () => {
@@ -203,7 +226,11 @@ describe('helpers.ts', () => {
     });
 
     it('should handle async callbacks', async () => {
-      const items = [1, 2, 3];
+      const items = [
+        1,
+        2,
+        3
+      ];
       const results: number[] = [];
 
       await forEach(items, async (item) => {
@@ -211,11 +238,19 @@ describe('helpers.ts', () => {
         results.push(item * 2);
       });
 
-      expect(results).toEqual([2, 4, 6]);
+      expect(results).toEqual([
+        2,
+        4,
+        6
+      ]);
     });
 
     it('should skip undefined items', async () => {
-      const items = [1, undefined, 3] as (number | undefined)[];
+      const items = [
+        1,
+        undefined,
+        3
+      ] as (number | undefined)[];
       const results: number[] = [];
 
       await forEach(items, async (item) => {
@@ -223,7 +258,10 @@ describe('helpers.ts', () => {
       });
 
       // undefined items are skipped
-      expect(results).toEqual([1, 3]);
+      expect(results).toEqual([
+        1,
+        3
+      ]);
     });
   });
 
@@ -324,7 +362,13 @@ describe('helpers.ts', () => {
 
       try {
         await execGit(['init'], repoDir);
-        const result = await execGit(['rev-parse', '--is-inside-work-tree'], repoDir);
+        const result = await execGit(
+          [
+            'rev-parse',
+            '--is-inside-work-tree'
+          ],
+          repoDir
+        );
 
         expect(result).toBe('true');
       } finally {
@@ -341,7 +385,11 @@ describe('helpers.ts', () => {
       // Because execGit uses execFile (no shell), metacharacters survive verbatim
       // instead of being expanded/executed.
       const payload = 'a; rm -rf / && echo $(whoami)';
-      const result = await execGit(['rev-parse', '--sq-quote', payload]);
+      const result = await execGit([
+        'rev-parse',
+        '--sq-quote',
+        payload
+      ]);
 
       expect(result).toContain('rm -rf');
       expect(result).toContain('$(whoami)');
@@ -349,15 +397,35 @@ describe('helpers.ts', () => {
 
     it('should return binary output without UTF-8 decoding', async () => {
       const repoDir = path.join(os.tmpdir(), `exec-git-buffer-test-${Date.now()}`);
-      const expected = Buffer.from([0x00, 0xff, 0x80, 0x41, 0x0a]);
+      const expected = Buffer.from([
+        0x00,
+        0xff,
+        0x80,
+        0x41,
+        0x0a
+      ]);
       await fs.ensureDir(repoDir);
 
       try {
         await execGit(['init'], repoDir);
         await fs.writeFile(path.join(repoDir, 'binary.bin'), expected);
-        const blob = await execGit(['hash-object', '-w', 'binary.bin'], repoDir);
+        const blob = await execGit(
+          [
+            'hash-object',
+            '-w',
+            'binary.bin'
+          ],
+          repoDir
+        );
 
-        const result = await execGitBuffer(['cat-file', '-p', blob], repoDir);
+        const result = await execGitBuffer(
+          [
+            'cat-file',
+            '-p',
+            blob
+          ],
+          repoDir
+        );
 
         expect(result).toEqual(expected);
       } finally {
@@ -373,9 +441,23 @@ describe('helpers.ts', () => {
       try {
         await execGit(['init'], repoDir);
         await fs.writeFile(path.join(repoDir, 'large.bin'), expected);
-        const blob = await execGit(['hash-object', '-w', 'large.bin'], repoDir);
+        const blob = await execGit(
+          [
+            'hash-object',
+            '-w',
+            'large.bin'
+          ],
+          repoDir
+        );
 
-        const result = await execGitBuffer(['cat-file', '-p', blob], repoDir);
+        const result = await execGitBuffer(
+          [
+            'cat-file',
+            '-p',
+            blob
+          ],
+          repoDir
+        );
 
         expect(result.byteLength).toBe(expected.byteLength);
         expect(result[0]).toBe(0xa5);
@@ -520,15 +602,53 @@ describe('helpers.ts', () => {
 
   describe('arrayEquals', () => {
     it('should return true for equal arrays', () => {
-      expect(arrayEquals([1, 2, 3], [1, 2, 3])).toBe(true);
+      expect(
+        arrayEquals(
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            1,
+            2,
+            3
+          ]
+        )
+      ).toBe(true);
     });
 
     it('should return false for different arrays', () => {
-      expect(arrayEquals([1, 2, 3], [1, 2, 4])).toBe(false);
+      expect(
+        arrayEquals(
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            1,
+            2,
+            4
+          ]
+        )
+      ).toBe(false);
     });
 
     it('should return false for different lengths', () => {
-      expect(arrayEquals([1, 2], [1, 2, 3])).toBe(false);
+      expect(
+        arrayEquals(
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            2,
+            3
+          ]
+        )
+      ).toBe(false);
     });
 
     it('should return true for empty arrays', () => {
@@ -544,8 +664,30 @@ describe('helpers.ts', () => {
     });
 
     it('should work with string arrays', () => {
-      expect(arrayEquals(['a', 'b'], ['a', 'b'])).toBe(true);
-      expect(arrayEquals(['a', 'b'], ['a', 'c'])).toBe(false);
+      expect(
+        arrayEquals(
+          [
+            'a',
+            'b'
+          ],
+          [
+            'a',
+            'b'
+          ]
+        )
+      ).toBe(true);
+      expect(
+        arrayEquals(
+          [
+            'a',
+            'b'
+          ],
+          [
+            'a',
+            'c'
+          ]
+        )
+      ).toBe(false);
     });
 
     it('should compare by reference for objects', () => {
@@ -676,7 +818,7 @@ describe('helpers.ts - readFilesRecursive', () => {
     expect(files).toHaveLength(1);
     expect(files).toContain('visible.txt');
     // File in hidden directory should not appear
-    expect(files.some(f => f.includes('.hidden-dir'))).toBe(false);
+    expect(files.some((f) => f.includes('.hidden-dir'))).toBe(false);
   });
 
   it('should include hidden files when includeHidden is true', async () => {
@@ -698,7 +840,7 @@ describe('helpers.ts - readFilesRecursive', () => {
     const files = await readFilesRecursive(tempDir, true);
 
     expect(files).toHaveLength(2);
-    expect(files.some(f => f.includes('.hidden-dir'))).toBe(true);
+    expect(files.some((f) => f.includes('.hidden-dir'))).toBe(true);
   });
 
   it('should return empty array for empty directory', async () => {

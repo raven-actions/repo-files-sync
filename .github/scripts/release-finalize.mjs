@@ -1,6 +1,6 @@
 // @ts-check
 
-import { Buffer } from 'node:buffer'
+import { Buffer } from 'node:buffer';
 
 /**
  * Re-pins the README usage examples to the final release tag at publish time.
@@ -30,32 +30,32 @@ import { Buffer } from 'node:buffer'
  * @param {import('@actions/core')} params.core - GitHub Actions core
  */
 export default async function main({ context, github, core }) {
-  const { owner, repo } = context.repo
-  const version = core.getInput('VERSION', { required: true })
-  const branch = core.getInput('BRANCH', { required: true })
+  const { owner, repo } = context.repo;
+  const version = core.getInput('VERSION', { required: true });
+  const branch = core.getInput('BRANCH', { required: true });
 
   // Current tip of the prerelease branch (the last RC commit).
-  const { data: ref } = await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` })
-  const tipSha = ref.object.sha
-  const { data: tipCommit } = await github.rest.git.getCommit({ owner, repo, commit_sha: tipSha })
+  const { data: ref } = await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+  const tipSha = ref.object.sha;
+  const { data: tipCommit } = await github.rest.git.getCommit({ owner, repo, commit_sha: tipSha });
 
   // Read README.md at the RC commit and re-pin this action's version to the final tag.
-  const { data: file } = await github.rest.repos.getContent({ owner, repo, path: 'README.md', ref: tipSha })
+  const { data: file } = await github.rest.repos.getContent({ owner, repo, path: 'README.md', ref: tipSha });
   if (Array.isArray(file) || file.type !== 'file' || typeof file.content !== 'string') {
-    throw new Error('README.md not found at the prerelease branch tip')
+    throw new Error('README.md not found at the prerelease branch tip');
   }
-  const current = Buffer.from(file.content, 'base64').toString('utf8')
+  const current = Buffer.from(file.content, 'base64').toString('utf8');
 
-  const slug = `${owner}/${repo}`
-  const escapedSlug = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const slug = `${owner}/${repo}`;
+  const escapedSlug = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Match `<owner>/<repo>@vX.Y.Z[-suffix]` and rewrite the version to the final tag.
-  const pattern = new RegExp(`(${escapedSlug}@)v?\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.]+)?`, 'g')
-  const updated = current.replace(pattern, `$1${version}`)
+  const pattern = new RegExp(`(${escapedSlug}@)v?\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.]+)?`, 'g');
+  const updated = current.replace(pattern, `$1${version}`);
 
   if (updated === current) {
-    core.info(`README already pins ${slug}@${version}; nothing to re-pin.`)
-    core.setOutput('sha', tipSha)
-    return
+    core.info(`README already pins ${slug}@${version}; nothing to re-pin.`);
+    core.setOutput('sha', tipSha);
+    return;
   }
 
   // Overlay only README.md on top of the RC tree, keeping dist/ etc. unchanged.
@@ -64,26 +64,26 @@ export default async function main({ context, github, core }) {
     repo,
     content: Buffer.from(updated, 'utf8').toString('base64'),
     encoding: 'base64'
-  })
+  });
   const { data: tree } = await github.rest.git.createTree({
     owner,
     repo,
     base_tree: tipCommit.tree.sha,
     tree: [{ path: 'README.md', mode: '100644', type: 'blob', sha: blob.sha }]
-  })
+  });
   const { data: commit } = await github.rest.git.createCommit({
     owner,
     repo,
     message: `chore(release): ${version}`,
     tree: tree.sha,
     parents: [tipSha]
-  })
+  });
 
   // Fast-forward the prerelease branch to the re-pinned commit so the release tag
   // (cut from this branch below) points at docs that match it. The branch is
   // deleted right after publishing.
-  await github.rest.git.updateRef({ owner, repo, ref: `heads/${branch}`, sha: commit.sha, force: false })
+  await github.rest.git.updateRef({ owner, repo, ref: `heads/${branch}`, sha: commit.sha, force: false });
 
-  core.info(`Re-pinned README to ${slug}@${version} at ${commit.sha}`)
-  core.setOutput('sha', commit.sha)
+  core.info(`Re-pinned README to ${slug}@${version} at ${commit.sha}`);
+  core.setOutput('sha', commit.sha);
 }

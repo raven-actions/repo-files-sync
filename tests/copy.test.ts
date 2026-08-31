@@ -118,7 +118,11 @@ describe('helpers.ts - copy and write functions', () => {
         '{% for item in items %}{{ item }}{% if not loop.last %}, {% endif %}{% endfor %}'
       );
 
-      await write(templateFile, outputFile, { items: ['a', 'b', 'c'] });
+      await write(templateFile, outputFile, { items: [
+          'a',
+          'b',
+          'c'
+        ] });
 
       const content = await fs.readFile(outputFile, 'utf-8');
       expect(content).toBe('a, b, c');
@@ -267,7 +271,11 @@ describe('helpers.ts - copy and write functions', () => {
           replace: true,
           deleteOrphaned: false,
           // Force shouldFilter=true but normalize to zero patterns
-          exclude: ['   ', '\n', '\t  ']
+          exclude: [
+            '   ',
+            '\n',
+            '\t  '
+          ]
         };
 
         await copy(srcFile, destFile, false, fileConfig, mockRepoConfig);
@@ -806,28 +814,31 @@ describe('helpers.ts - copy and write functions', () => {
         expect(await fs.pathExists(path.join(destSubDir, 'subdir'))).toBe(false);
       });
 
-      it.skipIf(process.platform === 'win32')('should preserve symbolic links in filtered directory copies', async () => {
-        const srcSubDir = path.join(srcDir, 'symlink-source');
-        const destSubDir = path.join(destDir, 'symlink-dest');
+      it.skipIf(process.platform === 'win32')(
+        'should preserve symbolic links in filtered directory copies',
+        async () => {
+          const srcSubDir = path.join(srcDir, 'symlink-source');
+          const destSubDir = path.join(destDir, 'symlink-dest');
 
-        await fs.ensureDir(srcSubDir);
-        await fs.writeFile(path.join(srcSubDir, 'target.txt'), 'Target');
-        await fs.symlink('target.txt', path.join(srcSubDir, 'link.txt'));
+          await fs.ensureDir(srcSubDir);
+          await fs.writeFile(path.join(srcSubDir, 'target.txt'), 'Target');
+          await fs.symlink('target.txt', path.join(srcSubDir, 'link.txt'));
 
-        const fileConfig: FileConfig = {
-          source: srcSubDir,
-          dest: destSubDir,
-          template: false,
-          replace: true,
-          deleteOrphaned: false,
-          exclude: ['*.tmp']
-        };
+          const fileConfig: FileConfig = {
+            source: srcSubDir,
+            dest: destSubDir,
+            template: false,
+            replace: true,
+            deleteOrphaned: false,
+            exclude: ['*.tmp']
+          };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+          await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
 
-        expect((await fs.lstat(path.join(destSubDir, 'link.txt'))).isSymbolicLink()).toBe(true);
-        expect(await fs.readlink(path.join(destSubDir, 'link.txt'))).toBe('target.txt');
-      });
+          expect((await fs.lstat(path.join(destSubDir, 'link.txt'))).isSymbolicLink()).toBe(true);
+          expect(await fs.readlink(path.join(destSubDir, 'link.txt'))).toBe('target.txt');
+        }
+      );
 
       it('should preserve multiple .git files when deleteOrphaned is enabled', async () => {
         const srcSubDir = path.join(srcDir, 'multi-git');
@@ -865,7 +876,7 @@ describe('helpers.ts - copy and write functions', () => {
       });
     });
 
-    describe('excludeAbsolutePaths (protects this action\'s own working directory)', () => {
+    describe("excludeAbsolutePaths (protects this action's own working directory)", () => {
       it('should not copy an excluded absolute path nested inside the source', async () => {
         const srcSubDir = path.join(srcDir, 'exclude-abs-path');
         const destSubDir = path.join(destDir, 'exclude-abs-path');

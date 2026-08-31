@@ -35,15 +35,15 @@
  * @param {import('@actions/core')} params.core - GitHub Actions core
  */
 export default async function main({ context, github, core }) {
-  const { owner, repo } = context.repo
+  const { owner, repo } = context.repo;
 
   // getBooleanInput throws on empty (scheduled runs pass no input), so guard it.
-  const dryRunInput = core.getInput('DRY_RUN')
-  const dryRun = dryRunInput ? core.getBooleanInput('DRY_RUN') : false
+  const dryRunInput = core.getInput('DRY_RUN');
+  const dryRun = dryRunInput ? core.getBooleanInput('DRY_RUN') : false;
 
-  const PRERELEASE_PREFIX = 'prerelease/'
-  const RELEASE_PREP_PREFIX = 'release-prep/'
-  const RELEASE_TITLE_PREFIX = 'chore(release): '
+  const PRERELEASE_PREFIX = 'prerelease/';
+  const RELEASE_PREP_PREFIX = 'release-prep/';
+  const RELEASE_TITLE_PREFIX = 'chore(release): ';
 
   /**
    * Parse a release/branch version into its comparable [major, minor, patch]
@@ -56,38 +56,46 @@ export default async function main({ context, github, core }) {
    * @returns {{ version: [number, number, number], stable: boolean } | null}
    */
   const parseVersion = (value) => {
-    const match = /^v?(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.]+)?$/.exec(value)
-    if (!match) return null
-    return { version: [Number(match[1]), Number(match[2]), Number(match[3])], stable: !match[4] }
-  }
+    const match = /^v?(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.]+)?$/.exec(value);
+    if (!match) return null;
+    return { version: [
+        Number(match[1]),
+        Number(match[2]),
+        Number(match[3])
+      ], stable: !match[4] };
+  };
 
   /**
    * @param {[number, number, number]} a
    * @param {[number, number, number]} b
    */
-  const compareVersion = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]
+  const compareVersion = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
 
   // All branches (paginated).
   const branches = await github.paginate(github.rest.repos.listBranches, {
     owner,
     repo,
     per_page: 100
-  })
-  const branchNames = branches.map((branch) => branch.name)
+  });
+  const branchNames = branches.map((branch) => branch.name);
 
   // Highest published STABLE release (ignore drafts and pre-releases).
   const releases = await github.paginate(github.rest.repos.listReleases, {
     owner,
     repo,
     per_page: 100
-  })
+  });
   /** @type {[number, number, number]} */
-  let latestStable = [0, 0, 0]
+  let latestStable = [
+    0,
+    0,
+    0
+  ];
   for (const release of releases) {
-    if (release.draft || release.prerelease) continue
-    const parsed = parseVersion(release.tag_name)
+    if (release.draft || release.prerelease) continue;
+    const parsed = parseVersion(release.tag_name);
     if (parsed && parsed.stable && compareVersion(parsed.version, latestStable) > 0) {
-      latestStable = parsed.version
+      latestStable = parsed.version;
     }
   }
 
@@ -102,22 +110,22 @@ export default async function main({ context, github, core }) {
     .filter(
       /** @returns {item is { name: string, parsed: { version: [number, number, number], stable: boolean } }} */
       (item) => item.parsed !== null
-    )
+    );
 
-  let activePrerelease = null
+  let activePrerelease = null;
   for (const branch of prereleaseBranches) {
-    if (!branch.parsed.stable) continue
-    if (compareVersion(branch.parsed.version, latestStable) <= 0) continue
+    if (!branch.parsed.stable) continue;
+    if (compareVersion(branch.parsed.version, latestStable) <= 0) continue;
     if (!activePrerelease || compareVersion(branch.parsed.version, activePrerelease.parsed.version) > 0) {
-      activePrerelease = branch
+      activePrerelease = branch;
     }
   }
 
   /** @type {string[]} */
-  const toDelete = []
+  const toDelete = [];
   for (const branch of prereleaseBranches) {
-    if (activePrerelease && branch.name === activePrerelease.name) continue
-    toDelete.push(branch.name)
+    if (activePrerelease && branch.name === activePrerelease.name) continue;
+    toDelete.push(branch.name);
   }
 
   // release-prep/* - keep only those still backing an OPEN release PR.
@@ -126,42 +134,42 @@ export default async function main({ context, github, core }) {
     repo,
     state: 'open',
     per_page: 100
-  })
+  });
   const openReleaseVersions = new Set(
     openPrs
       .filter((pr) => pr.title.startsWith(RELEASE_TITLE_PREFIX))
       .map((pr) => pr.title.slice(RELEASE_TITLE_PREFIX.length).trim())
-  )
+  );
   for (const name of branchNames.filter((name) => name.startsWith(RELEASE_PREP_PREFIX))) {
-    const version = name.slice(RELEASE_PREP_PREFIX.length)
+    const version = name.slice(RELEASE_PREP_PREFIX.length);
     if (!openReleaseVersions.has(version)) {
-      toDelete.push(name)
+      toDelete.push(name);
     }
   }
 
   if (toDelete.length === 0) {
-    core.info('No orphaned release branches found.')
-    return
+    core.info('No orphaned release branches found.');
+    return;
   }
 
   /** @type {string[]} */
-  const deleted = []
+  const deleted = [];
   for (const name of toDelete) {
     if (dryRun) {
-      core.info(`[dry-run] would delete ${name}`)
-      deleted.push(name)
-      continue
+      core.info(`[dry-run] would delete ${name}`);
+      deleted.push(name);
+      continue;
     }
     try {
-      await github.rest.git.deleteRef({ owner, repo, ref: `heads/${name}` })
-      core.info(`Deleted ${name}`)
-      deleted.push(name)
+      await github.rest.git.deleteRef({ owner, repo, ref: `heads/${name}` });
+      core.info(`Deleted ${name}`);
+      deleted.push(name);
     } catch (error) {
-      const err = /** @type {{ status?: number, message?: string }} */ (error)
+      const err = /** @type {{ status?: number, message?: string }} */ (error);
       if (err.status === 404 || err.status === 422) {
-        core.info(`Already gone: ${name}`)
+        core.info(`Already gone: ${name}`);
       } else {
-        core.warning(`Failed to delete ${name}: ${err.message || String(error)}`)
+        core.warning(`Failed to delete ${name}: ${err.message || String(error)}`);
       }
     }
   }
@@ -170,5 +178,5 @@ export default async function main({ context, github, core }) {
     .addHeading('Release branch cleanup', 2)
     .addRaw(dryRun ? 'Dry run - the following branches would be deleted:' : 'Deleted orphaned branches:')
     .addList(deleted)
-    .write()
+    .write();
 }

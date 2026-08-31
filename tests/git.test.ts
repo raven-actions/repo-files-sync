@@ -158,9 +158,7 @@ describe('git.ts - Git class', () => {
       await git.initRepo(mockRepoInfo);
 
       // Clone is invoked with git args (no shell) starting with the clone subcommand
-      const cloneCall = execGitMock.mock.calls.find(
-        (call) => Array.isArray(call[0]) && call[0][0] === 'clone'
-      );
+      const cloneCall = execGitMock.mock.calls.find((call) => Array.isArray(call[0]) && call[0][0] === 'clone');
       expect(cloneCall).toBeDefined();
       expect(cloneCall?.[0]).toContain('clone');
     });
@@ -171,16 +169,18 @@ describe('git.ts - Git class', () => {
       await git.initRepo(mockRepoInfo);
 
       expect(execGitMock).toHaveBeenCalledWith(
-        expect.arrayContaining(['config', '--local', 'user.name']),
+        expect.arrayContaining([
+          'config',
+          '--local',
+          'user.name'
+        ]),
         expect.any(String)
       );
     });
 
     it('should flag an empty repository and skip rev-parse calls', async () => {
       // `git rev-list -n 1 --all` returns nothing when the default branch has no commits yet
-      execGitMock.mockImplementation((args: string[]) =>
-        Promise.resolve(args[0] === 'rev-list' ? '' : 'main')
-      );
+      execGitMock.mockImplementation((args: string[]) => Promise.resolve(args[0] === 'rev-list' ? '' : 'main'));
 
       await git.initRepo(mockRepoInfo);
 
@@ -195,14 +195,18 @@ describe('git.ts - Git class', () => {
     });
 
     it('should not flag a repository that has commits', async () => {
-      execGitMock.mockImplementation((args: string[]) =>
-        Promise.resolve(args[0] === 'rev-list' ? 'abc123' : 'main')
-      );
+      execGitMock.mockImplementation((args: string[]) => Promise.resolve(args[0] === 'rev-list' ? 'abc123' : 'main'));
 
       await git.initRepo(mockRepoInfo);
 
       expect(git.isEmptyRepo).toBe(false);
-      expect(execGitMock).toHaveBeenCalledWith(['rev-parse', 'HEAD'], expect.any(String));
+      expect(execGitMock).toHaveBeenCalledWith(
+        [
+          'rev-parse',
+          'HEAD'
+        ],
+        expect.any(String)
+      );
     });
   });
 
@@ -216,7 +220,13 @@ describe('git.ts - Git class', () => {
       await git.createPrBranch();
 
       expect(execGitMock).toHaveBeenCalledWith(
-        ['switch', '--track', '-c', expect.stringContaining('main'), expect.stringContaining('origin/')],
+        [
+          'switch',
+          '--track',
+          '-c',
+          expect.stringContaining('main'),
+          expect.stringContaining('origin/')
+        ],
         expect.any(String)
       );
     });
@@ -226,7 +236,13 @@ describe('git.ts - Git class', () => {
 
       // Should include the suffix in the branch name
       expect(execGitMock).toHaveBeenCalledWith(
-        ['switch', '--track', '-c', expect.stringContaining('custom-suffix'), expect.stringContaining('origin/')],
+        [
+          'switch',
+          '--track',
+          '-c',
+          expect.stringContaining('custom-suffix'),
+          expect.stringContaining('origin/')
+        ],
         expect.any(String)
       );
     });
@@ -242,7 +258,12 @@ describe('git.ts - Git class', () => {
       await git.add('[draft].txt');
 
       expect(execGitMock).toHaveBeenCalledWith(
-        ['add', '-f', '--', ':(literal)[draft].txt'],
+        [
+          'add',
+          '-f',
+          '--',
+          ':(literal)[draft].txt'
+        ],
         expect.any(String)
       );
     });
@@ -258,7 +279,13 @@ describe('git.ts - Git class', () => {
       await git.remove('[draft].txt');
 
       expect(execGitMock).toHaveBeenCalledWith(
-        ['rm', '-r', '-f', '--', ':(literal)[draft].txt'],
+        [
+          'rm',
+          '-r',
+          '-f',
+          '--',
+          ':(literal)[draft].txt'
+        ],
         expect.any(String)
       );
     });
@@ -277,7 +304,11 @@ describe('git.ts - Git class', () => {
       expect(result).toBe(true);
 
       expect(execGitMock).toHaveBeenCalledWith(
-        ['diff', '--cached', '--name-only'],
+        [
+          'diff',
+          '--cached',
+          '--name-only'
+        ],
         expect.any(String)
       );
     });
@@ -309,7 +340,14 @@ describe('git.ts - Git class', () => {
 
       await git.commit(message);
 
-      expect(execGitMock).toHaveBeenCalledWith(['commit', '-m', message], expect.any(String));
+      expect(execGitMock).toHaveBeenCalledWith(
+        [
+          'commit',
+          '-m',
+          message
+        ],
+        expect.any(String)
+      );
     });
   });
 
@@ -318,12 +356,25 @@ describe('git.ts - Git class', () => {
       execGitMock.mockResolvedValue('main');
       await git.initRepo(mockRepoInfo);
 
-      const content = Buffer.from([0x00, 0xff, 0x80, 0x41, 0x0a]);
+      const content = Buffer.from([
+        0x00,
+        0xff,
+        0x80,
+        0x41,
+        0x0a
+      ]);
       execGitBufferMock.mockResolvedValueOnce(content);
 
       await git.uploadGitHubBlob('blob-sha');
 
-      expect(execGitBufferMock).toHaveBeenCalledWith(['cat-file', '-p', 'blob-sha'], git.workingDir);
+      expect(execGitBufferMock).toHaveBeenCalledWith(
+        [
+          'cat-file',
+          '-p',
+          'blob-sha'
+        ],
+        git.workingDir
+      );
       expect((git as unknown as GitApiMocks).github.git.createBlob).toHaveBeenCalledWith({
         owner: 'test',
         repo: 'repo',
@@ -418,12 +469,21 @@ describe('git.ts - Git class', () => {
       await git.createPrBranch();
 
       expect(execGitMock).toHaveBeenCalledWith(
-        ['remote', 'set-branches', 'origin', '*'],
+        [
+          'remote',
+          'set-branches',
+          'origin',
+          '*'
+        ],
         expect.any(String)
       );
 
       expect(execGitMock).toHaveBeenCalledWith(
-        ['fetch', '-v', '--depth=1'],
+        [
+          'fetch',
+          '-v',
+          '--depth=1'
+        ],
         expect.any(String)
       );
     });
@@ -435,9 +495,7 @@ describe('git.ts - Git class', () => {
 
       await git.initRepo(mockRepoInfo);
 
-      const cloneCall = execGitMock.mock.calls.find(
-        (call) => Array.isArray(call[0]) && call[0][0] === 'clone'
-      );
+      const cloneCall = execGitMock.mock.calls.find((call) => Array.isArray(call[0]) && call[0][0] === 'clone');
       expect(cloneCall?.[0]).toContain('--branch');
       expect(cloneCall?.[0]).toContain('main');
     });
@@ -447,9 +505,7 @@ describe('git.ts - Git class', () => {
 
       await git.initRepo(mockRepoInfo);
 
-      const cloneCall = execGitMock.mock.calls.find(
-        (call) => Array.isArray(call[0]) && call[0][0] === 'clone'
-      );
+      const cloneCall = execGitMock.mock.calls.find((call) => Array.isArray(call[0]) && call[0][0] === 'clone');
       expect(cloneCall?.[0]).toContain('--depth');
       expect(cloneCall?.[0]).toContain('1');
     });
@@ -465,9 +521,7 @@ describe('git.ts - Git class', () => {
       await git.initRepo(defaultBranchRepo);
 
       // Should not include --branch option
-      const cloneCall = execGitMock.mock.calls.find(
-        (call) => Array.isArray(call[0]) && call[0][0] === 'clone'
-      );
+      const cloneCall = execGitMock.mock.calls.find((call) => Array.isArray(call[0]) && call[0][0] === 'clone');
       expect(cloneCall?.[0]).not.toContain('--branch');
     });
   });
@@ -488,7 +542,11 @@ describe('git.ts - Git class', () => {
       await git.initRepo(mockRepoInfo);
 
       expect(execGitMock).toHaveBeenCalledWith(
-        ['rev-parse', '--abbrev-ref', 'HEAD'],
+        [
+          'rev-parse',
+          '--abbrev-ref',
+          'HEAD'
+        ],
         expect.any(String)
       );
     });
@@ -517,9 +575,7 @@ describe('git.ts - edge cases', () => {
 
       await git.initRepo(repoWithSpecialBranch);
 
-      const cloneCall = execGitMock.mock.calls.find(
-        (call) => Array.isArray(call[0]) && call[0][0] === 'clone'
-      );
+      const cloneCall = execGitMock.mock.calls.find((call) => Array.isArray(call[0]) && call[0][0] === 'clone');
       expect(cloneCall?.[0]).toContain('--branch');
       expect(cloneCall?.[0]).toContain('feature/test');
     });
@@ -586,12 +642,13 @@ describe('git.ts - edge cases', () => {
       const commits = await (git as unknown as { getCommitsToPush: () => Promise<string[]> }).getCommitsToPush();
 
       // Verify it uses lastCommitSha (which is 'main' from mock) not baseBranch
-      const logCall = execGitMock.mock.calls.find(
-        (call) => Array.isArray(call[0]) && call[0][0] === 'log'
-      );
+      const logCall = execGitMock.mock.calls.find((call) => Array.isArray(call[0]) && call[0][0] === 'log');
       expect(logCall).toBeDefined();
       expect(logCall?.[0]).toContain('main..HEAD');
-      expect(commits).toEqual(['abc123', 'def456']);
+      expect(commits).toEqual([
+        'abc123',
+        'def456'
+      ]);
     });
 
     it('should filter empty strings from git log output', async () => {
@@ -627,7 +684,14 @@ describe('git.ts - edge cases', () => {
       const result = await git.getTreeDiff('current-tree', 'previous-tree');
 
       expect(execGitMock).toHaveBeenCalledWith(
-        ['diff-tree', '-r', '-z', '--no-commit-id', 'current-tree', 'previous-tree'],
+        [
+          'diff-tree',
+          '-r',
+          '-z',
+          '--no-commit-id',
+          'current-tree',
+          'previous-tree'
+        ],
         undefined,
         false
       );
@@ -800,7 +864,14 @@ describe('git.ts - edge cases', () => {
 
       // Mock pulls.list to return a merged PR
       gitAny.github.pulls.list.mockResolvedValue({
-        data: [{ number: 10, html_url: 'https://github.com/test/repo/pull/10', body: 'old', merged_at: '2026-01-01T00:00:00Z' }]
+        data: [
+          {
+            number: 10,
+            html_url: 'https://github.com/test/repo/pull/10',
+            body: 'old',
+            merged_at: '2026-01-01T00:00:00Z'
+          }
+        ]
       });
 
       const hasClosed = await git.hasClosedPr();
@@ -905,7 +976,9 @@ describe('git.ts - closed PR reopen handling', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const gitAny = git as any;
     gitAny.github.pulls.list.mockResolvedValue({
-      data: [{ number: 10, html_url: 'https://github.com/test/repo/pull/10', body: 'm', merged_at: '2026-01-01T00:00:00Z' }]
+      data: [
+        { number: 10, html_url: 'https://github.com/test/repo/pull/10', body: 'm', merged_at: '2026-01-01T00:00:00Z' }
+      ]
     });
 
     expect(await git.getClosedPr()).toBeUndefined();
@@ -922,9 +995,11 @@ describe('git.ts - closed PR reopen handling', () => {
     execGitMock.mockResolvedValue('abc123');
     // No open PR, but a stale closed PR exists for the branch
     gitAny.github.pulls.list.mockImplementation(({ state }: { state: string }) =>
-      state === 'open'
-        ? Promise.resolve({ data: [] })
-        : Promise.resolve({ data: [{ number: 12, html_url: 'https://github.com/test/repo/pull/12', body: 'old', merged_at: null }] })
+      state === 'open' ?
+        Promise.resolve({ data: [] })
+      : Promise.resolve({
+          data: [{ number: 12, html_url: 'https://github.com/test/repo/pull/12', body: 'old', merged_at: null }]
+        })
     );
 
     await git.createPrBranch();
@@ -937,7 +1012,14 @@ describe('git.ts - closed PR reopen handling', () => {
     expect(gitAny.reopenClosedPr).toBe(true);
     expect(gitAny.forceUpdateBranch).toBe(true);
     // Branch is rebuilt from the base tip with a force-create switch (-C)
-    expect(execGitMock).toHaveBeenCalledWith(['switch', '-C', expect.stringContaining('main')], expect.any(String));
+    expect(execGitMock).toHaveBeenCalledWith(
+      [
+        'switch',
+        '-C',
+        expect.stringContaining('main')
+      ],
+      expect.any(String)
+    );
     // The remote branch must NOT be deleted anymore
     expect(gitAny.github.git.deleteRef).not.toHaveBeenCalled();
   });
@@ -953,9 +1035,11 @@ describe('git.ts - closed PR reopen handling', () => {
     execGitMock.mockResolvedValue('abc123');
     // A live open PR AND stale closed PRs both exist for the same branch
     gitAny.github.pulls.list.mockImplementation(({ state }: { state: string }) =>
-      state === 'open'
-        ? Promise.resolve({ data: [{ number: 99, html_url: 'https://github.com/test/repo/pull/99', body: 'live' }] })
-        : Promise.resolve({ data: [{ number: 12, html_url: 'https://github.com/test/repo/pull/12', body: 'old', merged_at: null }] })
+      state === 'open' ?
+        Promise.resolve({ data: [{ number: 99, html_url: 'https://github.com/test/repo/pull/99', body: 'live' }] })
+      : Promise.resolve({
+          data: [{ number: 12, html_url: 'https://github.com/test/repo/pull/12', body: 'old', merged_at: null }]
+        })
     );
 
     await git.createPrBranch();
@@ -989,7 +1073,9 @@ describe('git.ts - closed PR reopen handling', () => {
     await git.push();
 
     // Reopen happens before the force-push, while the branch still matches the PR
-    expect(gitAny.github.pulls.update).toHaveBeenCalledWith(expect.objectContaining({ pull_number: 12, state: 'open' }));
+    expect(gitAny.github.pulls.update).toHaveBeenCalledWith(
+      expect.objectContaining({ pull_number: 12, state: 'open' })
+    );
     expect(gitAny.prWasReopened).toBe(true);
     expect(gitAny.reopenClosedPr).toBe(false);
     expect(gitAny.existingPr.number).toBe(12);
