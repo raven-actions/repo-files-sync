@@ -90,7 +90,7 @@ flowchart TD
    - tags `vX.Y.Z` at that commit and marks it `latest`,
    - deletes the `prerelease/vX.Y.Z` and `release-prep/vX.Y.Z` branches.
 
-> The release PR is created by the workflow token, so token-triggered checks (such as `PR Title`) do not re-run on it. The title is correct by construction. If you make those checks required, exclude `release-prep/*` or create the PR with a PAT.
+> The release PR is created by the workflow token, so GitHub does not start `pull_request` workflow runs for it. **Prepare Release** therefore dispatches the **CI** workflow against the `release-prep/vX.Y.Z` branch (`workflow_dispatch` is the one event `GITHUB_TOKEN` is allowed to trigger). Those check runs attach to the branch's head commit - which is the PR's head commit - so the required `Lint`, `Build`, `Type Check` and `Test Check` contexts are satisfied without bypassing the ruleset. `PR Title` still does not run on the release PR; its title is correct by construction, so keep that check out of the required list.
 
 ## Cleaning up orphaned release branches
 

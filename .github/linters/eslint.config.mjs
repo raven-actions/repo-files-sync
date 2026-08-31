@@ -1,12 +1,52 @@
 import js from '@eslint/js';
 import { defineConfig } from 'eslint/config';
-import tseslint from 'typescript-eslint';
 import globals from 'globals';
 import prettier from 'eslint-config-prettier';
 
+// typescript-eslint refuses to load when the installed TypeScript falls outside
+// its supported peer range (it currently caps at `<6.1.0`, while this project
+// compiles with the TypeScript 7 line). That used to make `pnpm lint` fail
+// outright, so the CI step was commented out and the required `Lint` check
+// silently passed without linting anything.
+//
+// Load it defensively instead:
+//   - JavaScript, including the .github/scripts release scripts, is always linted;
+//   - TypeScript linting turns itself back on automatically as soon as the
+//     installed typescript-eslint supports the installed TypeScript;
+//   - a loud warning (a GitHub annotation in CI) is emitted while TypeScript
+//     linting is unavailable, so the gap cannot pass unnoticed.
+let tseslint = null;
+let tseslintError = null;
+
+try {
+  ({ default: tseslint } = await import('typescript-eslint'));
+} catch (error) {
+  tseslintError = error;
+}
+
+if (!tseslint) {
+  const reason = tseslintError instanceof Error ? tseslintError.message : String(tseslintError);
+  const message =
+    `TypeScript files are NOT being linted: typescript-eslint could not be loaded (${reason.split('\n')[0]}). ` +
+    'JavaScript is still linted and TypeScript is still checked by "pnpm typecheck". ' +
+    'TypeScript linting resumes automatically once typescript-eslint supports the installed TypeScript.';
+
+  if (process.env['GITHUB_ACTIONS']) {
+    console.log(`::warning title=TypeScript linting skipped::${message}`);
+  }
+  console.warn(`\nWARNING: ${message}\n`);
+}
+
 export default defineConfig(
+  {
+    ignores: [
+      'dist/**',
+      'coverage/**',
+      'node_modules/**'
+    ]
+  },
   js.configs.recommended,
-  tseslint.configs.recommended,
+  ...(tseslint ? tseslint.configs.recommended : []),
   {
     languageOptions: {
       ecmaVersion: 2022,
@@ -14,9 +54,6 @@ export default defineConfig(
       globals: {
         ...globals.node,
         ...globals.es2022
-      },
-      parserOptions: {
-        tsconfigRootDir: import.meta.dirname + '/../..'
       }
     },
     rules: {
@@ -63,7 +100,6 @@ export default defineConfig(
       'no-new-func': 'error',
       'no-new-wrappers': 'error',
       'no-proto': 'error',
-      'no-redeclare': 'off', // Handled by TypeScript
       'no-script-url': 'error',
       'no-self-compare': 'error',
       'no-sequences': 'error',
@@ -78,9 +114,7 @@ export default defineConfig(
 
       // Variables
       'no-delete-var': 'error',
-      'no-undef': 'off', // Handled by TypeScript
-      'no-unused-vars': 'off', // Handled by @typescript-eslint/no-unused-vars
-      '@typescript-eslint/no-unused-vars': [
+      'no-unused-vars': [
         'error',
         { varsIgnorePattern: '^_', argsIgnorePattern: '^_' }],
       'no-undef-init': 'error',
@@ -91,14 +125,12 @@ export default defineConfig(
       camelcase: [
         'error',
         { properties: 'never' }],
-      'no-multiple-empty-lines': 'error',
       'no-nested-ternary': 'error',
       'one-var': [
         'error',
         'never'
       ],
       'no-unneeded-ternary': 'error',
-      'no-new-object': 'error',
       'default-case-last': 'error',
       'grouped-accessor-pairs': [
         'error',
@@ -115,7 +147,6 @@ export default defineConfig(
 
       // Node.js
       'no-new-require': 'error',
-      'no-path-concat': 'error',
 
       // Other
       'no-empty': [
@@ -126,24 +157,35 @@ export default defineConfig(
       'no-misleading-character-class': 'error',
       'no-async-promise-executor': 'error',
       'no-compare-neg-zero': 'error',
-      'getter-return': 'error',
-
-      // TypeScript specific
-      '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/explicit-function-return-type': 'off',
-      '@typescript-eslint/no-non-null-assertion': 'off',
-      '@typescript-eslint/no-require-imports': 'off'
+      'getter-return': 'error'
     }
   },
-  // Prettier config must be last to override formatting rules
-  prettier,
-  {
-    ignores: [
-      'dist/**',
-      'node_modules/**',
-      '*.js',
-      '*.cjs',
-      '*.mjs'
+  // TypeScript-only handling, applied only when typescript-eslint is usable.
+  ...(tseslint ?
+    [
+      {
+        files: ['**/*.ts'],
+        languageOptions: {
+          parserOptions: {
+            tsconfigRootDir: import.meta.dirname + '/../..'
+          }
+        },
+        rules: {
+          // Handled by the TypeScript compiler itself.
+          'no-redeclare': 'off',
+          'no-undef': 'off',
+          'no-unused-vars': 'off',
+          '@typescript-eslint/no-unused-vars': [
+            'error',
+            { varsIgnorePattern: '^_', argsIgnorePattern: '^_' }],
+          '@typescript-eslint/no-explicit-any': 'warn',
+          '@typescript-eslint/explicit-function-return-type': 'off',
+          '@typescript-eslint/no-non-null-assertion': 'off',
+          '@typescript-eslint/no-require-imports': 'off'
+        }
+      }
     ]
-  }
+  : []),
+  // Prettier config must be last to override formatting rules
+  prettier
 );

@@ -121,5 +121,6 @@ export default async function main({ context, github, core }) {
 
   core.setOutput('number', String(pr.number))
   core.setOutput('url', pr.html_url)
+  core.setOutput('branch', branch)
   core.notice(`Release PR for ${version}: ${pr.html_url}`)
 }

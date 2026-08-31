@@ -27,6 +27,7 @@ jobs:
     permissions:
       contents: write # create the release-prep branch + verified changelog commit
       pull-requests: write # open/update the release PR
+      actions: write # dispatch CI against the release branch (see the last step)
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -120,6 +121,22 @@ jobs:
             CHANGELOG.md
             README.md
           INPUT_BRANCH_PREFIX: release-prep
+
+      # The release PR is opened with GITHUB_TOKEN, and GitHub deliberately does
+      # not start `pull_request` workflow runs for token-created PRs - so the
+      # required Lint / Build / Type Check / Test Check contexts would never
+      # appear and the PR could only be merged by bypassing the ruleset.
+      # `workflow_dispatch` is the documented exception that GITHUB_TOKEN *is*
+      # allowed to trigger, and a dispatched run's check runs attach to the head
+      # commit of the release branch - which is exactly the PR's head commit - so
+      # they satisfy the required status checks.
+      - name: Run CI on the release branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.pr.outputs.branch }}
+        run: |
+          gh workflow run ci.yml --ref "${BRANCH}"
+          echo "Dispatched CI on ${BRANCH}; its checks report on the release PR."
 
       - name: Summary
         env:
