@@ -1,0 +1,865 @@
+# 🔁 Repo Files Sync Action
+
+[![GitHub - marketplace](https://img.shields.io/badge/marketplace-repo--files--sync-blue?logo=github&style=flat-square)](https://github.com/marketplace/actions/repo-files-sync)
+[![GitHub - release](https://img.shields.io/github/v/release/raven-actions/repo-files-sync?style=flat-square)](https://github.com/raven-actions/repo-files-sync/releases/latest)
+[![GitHub - ci](https://img.shields.io/github/actions/workflow/status/raven-actions/repo-files-sync/ci.yml?logo=github&label=CI&style=flat-square&branch=main&event=push)](https://github.com/raven-actions/repo-files-sync/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush)
+[![GitHub - license](https://img.shields.io/github/license/raven-actions/repo-files-sync?style=flat-square)](https://github.com/raven-actions/repo-files-sync/blob/main/LICENSE)
+[![Codecov](https://img.shields.io/codecov/c/github/raven-actions/repo-files-sync/main?logo=codecov&style=flat-square&token=VxxCGXH3R5)](https://codecov.io/github/raven-actions/repo-files-sync)
+
+---
+
+> ⚠️ This is a heavily modified fork project of the [repo-file-sync-action](https://github.com/BetaHuhn/repo-file-sync-action), which looks like is stale.
+
+Keep files like Action workflows or entire directories in sync between multiple repositories.
+
+## 👋 Introduction
+
+With [repo-files-sync](https://github.com/raven-actions/repo-files-sync) you can sync files, like workflow `.yml` files, configuration files or whole directories between repositories or branches. It works by running a GitHub Action in your main repository every time you push something to that repo. The action will use a `sync.yml` config file to figure out which files it should sync where. If it finds a file which is out of sync it will open a pull request in the target repository with the changes.
+
+## 🚀 Features
+
+- Keep GitHub Actions workflow files in sync across all your repositories
+- Sync any file or a whole directory to as many repositories as you want
+- Easy configuration for any use case
+- Create a pull request in the target repo so you have the last say on what gets merged
+- Filter directory syncs using glob patterns (`include`, `exclude`)
+- Optionally delete orphaned files in the target (`deleteOrphaned` / `DELETE_ORPHANED`)
+- Optionally keep sync pull requests rebased on the latest base branch (`REBASE`), similar to Dependabot
+- Automatically label pull requests to integrate with other actions like [automerge-action](https://github.com/pascalgn/automerge-action)
+- Assign users to the pull request
+- Request reviews globally or per group (users and teams)
+- Sync using a GitHub App installation token (GitHub-verified commits)
+- Optional fork-based workflow (push to forks, open PRs upstream)
+- Render [Jinja](https://jinja.palletsprojects.com/)-style templates and use variables thanks to [Nunjucks](https://mozilla.github.io/nunjucks/), with best-effort sandboxing against template-injection escapes enabled by default
+
+## 📚 Usage
+
+### Workflow
+
+Create a `.yml` file in your `.github/workflows` folder (you can find more info about the structure in the [GitHub Docs](https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions)):
+
+**.github/workflows/sync.yml**
+
+```yml
+name: Sync
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run Files Sync
+        uses: raven-actions/repo-files-sync@v2.0.0-rc.1
+        with:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+```
+
+#### Token
+
+In order for the Action to access your repositories you have to provide a token as the value for `GH_TOKEN` (`GITHUB_TOKEN` will **not** work for cross-repo sync). The action accepts either a [Personal Access Token](https://docs.github.com/en/free-pro-team@latest/github/authenticating-to-github/creating-a-personal-access-token) (classic or fine-grained) or a GitHub App installation token, and detects the token type automatically from its prefix. A classic PAT needs the full repo scope ([#31](https://github.com/raven-actions/repo-files-sync/discussions/31#discussioncomment-674804)).
+
+It is recommended to set the token as a
+[Repository Secret](https://docs.github.com/en/free-pro-team@latest/actions/reference/encrypted-secrets#creating-encrypted-secrets-for-a-repository).
+
+A GitHub App installation token (prefix `ghs_`) can be used instead. You can obtain such a token for example via [this](https://github.com/marketplace/actions/create-github-app-token) action. Tokens from apps have the advantage that they provide more granular access control, and commits are created through the GitHub API as verified commits.
+
+The app needs to be configured for each repo you want to sync to, and have the `Contents` read & write and `Metadata` read-only permission. If you want to use PRs (default setting) you additionally need `Pull requests` read & write access, and to sync workflow files you need `Workflows` read & write access.
+
+When using an installation token you are required to provide the `GIT_EMAIL` and `GIT_USERNAME` input. Fine-grained PATs (prefix `github_pat_`) are detected automatically.
+
+### Sync configuration
+
+The last step is to create a `.yml` file in the `.github` folder of your repository and specify what file(s) to sync to which repositories:
+
+**.github/sync.yml**
+
+```yml
+user/repository:
+  - .github/workflows/test.yml
+  - .github/workflows/lint.yml
+
+user/repository2:
+  - source: workflows/stale.yml
+    dest: .github/workflows/stale.yml
+```
+
+More info on how to specify what files to sync where [below](#%EF%B8%8F-sync-configuration).
+
+### Versioning
+
+This action publishes only **exact, immutable version tags** (for example `v1.0.0`). There are intentionally no floating `latest`, `v1`, or `v1.2` aliases, so pin to a specific release and a new version can never change your workflow unexpectedly:
+
+```yml
+uses: raven-actions/repo-files-sync@v2.0.0-rc.1
+```
+
+To stay up to date, let [Dependabot keep the pinned version current](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot) for you:
+
+```yml
+# .github/dependabot.yml
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+```
+
+For maximum supply-chain safety you can also pin to the full commit SHA of a release and still let Dependabot update it.
+
+### Verifying the integrity of a release
+
+Every published build ships with a signed [build provenance attestation](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds), so you can cryptographically verify that the `dist/index.mjs` you run was built by this repository's CI and has not been tampered with.
+
+After checking out the action (or downloading `dist/index.mjs` from a release tag), verify it with the [GitHub CLI](https://cli.github.com/):
+
+```bash
+gh attestation verify dist/index.mjs --repo raven-actions/repo-files-sync
+```
+
+When [immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases) are enabled on the repository, each published release additionally receives a signed release attestation and its tag and assets are locked against tampering. See [Verifying the integrity of a release](https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/verifying-the-integrity-of-a-release) for more details.
+
+## ⚙️ Action Inputs
+
+Here are all the inputs [repo-files-sync](https://github.com/raven-actions/repo-files-sync) takes:
+
+| Key                     | Value                                                                                                                                                                                                           | Required                               | Default                        |
+|-------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------|--------------------------------|
+| `GH_TOKEN`              | A Personal Access Token (classic or fine-grained) or a GitHub App installation token; type auto-detected from prefix                                                                                            | **Yes**                                | N/A                            |
+| `CONFIG_PATH`           | Path to the sync configuration file                                                                                                                                                                             | **No**                                 | .github/sync.yml               |
+| `INLINE_CONFIG`         | Inline YAML configuration (alternative to CONFIG_PATH)                                                                                                                                                          | **No**                                 | N/A                            |
+| `REPOS`                 | Limit the sync to specific target repositories (comma-separated `owner/name`, optionally `@branch`). Only filters which configured repos are processed, keeping their config order; unmatched names are ignored | **No**                                 | N/A                            |
+| `PR_LABELS`             | Labels which will be added to the pull request. Set to false to turn off                                                                                                                                        | **No**                                 | sync                           |
+| `ASSIGNEES`             | Users to assign to the pull request                                                                                                                                                                             | **No**                                 | N/A                            |
+| `REVIEWERS`             | Users to request a review of the pull request from                                                                                                                                                              | **No**                                 | N/A                            |
+| `TEAM_REVIEWERS`        | Teams to request a review of the pull request from                                                                                                                                                              | **No**                                 | N/A                            |
+| `COMMIT_PREFIX`         | Prefix for commit message and pull request title                                                                                                                                                                | **No**                                 | 🔄                             |
+| `COMMIT_BODY`           | Commit message body. Will be appended to commit message, separated by two line returns.                                                                                                                         | **No**                                 | ''                             |
+| `PR_TITLE`              | Custom title for the PR. Overrides default title                                                                                                                                                                | **No**                                 | ''                             |
+| `PR_BODY`               | Additional content to add in the PR description.                                                                                                                                                                | **No**                                 | ''                             |
+| `ORIGINAL_MESSAGE`      | Use original commit message instead. Only works if the file(s) were changed and the action was triggered by pushing a single commit.                                                                            | **No**                                 | false                          |
+| `COMMIT_AS_PR_TITLE`    | Use first line of the commit message as PR title. Only works if `ORIGINAL_MESSAGE` is `true` and working.                                                                                                       | **No**                                 | false                          |
+| `COMMIT_EACH_FILE`      | Commit each file seperately                                                                                                                                                                                     | **No**                                 | true                           |
+| `GIT_EMAIL`             | The e-mail address used to commit the synced files                                                                                                                                                              | **Only when using installation token** | the email of the PAT used      |
+| `GIT_USERNAME`          | The username used to commit the synced files                                                                                                                                                                    | **Only when using installation token** | the username of the PAT used   |
+| `OVERWRITE_EXISTING_PR` | Overwrite any existing Sync PR with the new changes                                                                                                                                                             | **No**                                 | true                           |
+| `REBASE`                | Keep an existing sync PR up to date with the target branch (Dependabot-style); rebuilds the branch on the latest base and force-updates it                                                                      | **No**                                 | false                          |
+| `BRANCH_PREFIX`         | Specify a different prefix for the new branch in the target repo                                                                                                                                                | **No**                                 | repo-sync/SOURCE_REPO_NAME     |
+| `TMP_DIR`               | The working directory where all git operations will be done                                                                                                                                                     | **No**                                 | tmp-${ Date.now().toString() } |
+| `DRY_RUN`               | Run everything except that nothing will be pushed                                                                                                                                                               | **No**                                 | false                          |
+| `SKIP_CLEANUP`          | Skips removing the temporary directory. Useful for debugging                                                                                                                                                    | **No**                                 | false                          |
+| `SKIP_PR`               | Skips creating a Pull Request and pushes directly to the default branch                                                                                                                                         | **No**                                 | false                          |
+| `DELETE_ORPHANED`       | Global default for deleting orphaned files in target repositories (used when file-level `deleteOrphaned` is not set)                                                                                            | **No**                                 | false                          |
+| `FORK`                  | A Github account username. Changes will be pushed to a fork of target repos on this account.                                                                                                                    | **No**                                 | false                          |
+| `TEMPLATE_SANDBOX`      | Harden Nunjucks template rendering against common `constructor`/`__proto__` template-injection escapes. Best-effort, not a full sandbox - see [Using templates](#using-templates). Logs a warning every run when disabled | **No**                                 | true                           |
+| `TEMPLATE_AUTOESCAPE`   | Enable Nunjucks' autoescape option for rendered `template` files. Set to false when templating non-HTML files (YAML, shell scripts) where escaping `'`/`<`/`>` isn't desired                                    | **No**                                 | true                           |
+
+### Input behavior notes
+
+- `DRY_RUN: true` runs the full sync logic, but does not push any changes.
+- `SKIP_PR: true` pushes changes directly to the target repo's default branch (no PR).
+- `SKIP_CLEANUP: true` keeps the working directory (`TMP_DIR`) on the runner for debugging.
+- `REBASE: true` keeps an open sync PR rebased on the latest base branch, similar to [Dependabot's rebase](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/managing-pull-requests-for-dependency-updates#managing-dependabot-pull-requests-with-comment-commands). When the PR branch is behind the base branch it is rebuilt on top of the latest base and force-pushed, so any commits pushed manually to the sync branch are discarded. Requires `OVERWRITE_EXISTING_PR` (the default) and has no effect with `SKIP_PR`.
+- `TEMPLATE_SANDBOX: false` disables the template rendering hardening described in [Using templates](#using-templates) and logs a warning on every run while it is disabled.
+- `GIT_EMAIL`/`GIT_USERNAME` are validated up front: the action fails fast with a clear error if either is missing while `GH_TOKEN` is a GitHub App installation token, instead of silently committing with an empty/invalid identity.
+
+### Outputs
+
+The action sets the `pull_request_urls` output to the URLs of any created Pull Requests. It will be an array of URLs to each PR, e.g. `'["https://github.com/username/repository/pull/number", "..."]'`.
+
+## 🛠️ Sync Configuration
+
+In order to tell [repo-files-sync](https://github.com/raven-actions/repo-files-sync) what files to sync where, you have to create a `sync.yml` file in the `.github` directory of your main repository (see [action-inputs](#%EF%B8%8F-action-inputs) on how to change the location).
+
+> **💡 Tip:** For IDE validation and autocompletion, add this comment at the top of your `sync.yml`:
+>
+> ```yml
+> # yaml-language-server: $schema=https://raw.githubusercontent.com/raven-actions/repo-files-sync/main/sync.schema.json
+> ```
+
+The top-level key should be used to specify the target repository in the format `username`/`repository-name`@`branch`, after that you can list all the files you want to sync to that individual repository:
+
+```yml
+user/repo:
+  - path/to/file.txt
+user/repo2@develop:
+  - path/to/file2.txt
+```
+
+### Inline configuration
+
+Instead of using a configuration file, you can provide the sync configuration directly in your workflow using `INLINE_CONFIG`:
+
+```yml
+- name: Run Files Sync
+  uses: raven-actions/repo-files-sync@v2.0.0-rc.1
+  with:
+    GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    INLINE_CONFIG: |
+      user/repo:
+        - LICENSE
+        - .github/workflows/ci.yml
+      user/repo2:
+        - source: src/
+          dest: lib/
+```
+
+This is useful for simple configurations or when you want to keep everything in one file.
+
+There are multiple ways to specify which files to sync to each individual repository.
+
+### List individual file(s)
+
+The easiest way to sync files is the list them on a new line for each repository:
+
+```yml
+user/repo:
+  - .github/workflows/build.yml
+  - LICENSE
+  - .gitignore
+```
+
+### Different destination path/filename(s)
+
+Using the `dest` option you can specify a destination path in the target repo and/or change the filename for each source file:
+
+```yml
+user/repo:
+  - source: workflows/build.yml
+    dest: .github/workflows/build.yml
+  - source: LICENSE.md
+    dest: LICENSE
+```
+
+### Sync entire directories
+
+You can also specify entire directories to sync:
+
+```yml
+user/repo:
+  - source: workflows/
+    dest: .github/workflows/
+```
+
+### Exclude certain files when syncing directories
+
+Using the `exclude` key you can specify files you want to exclude when syncing entire directories (#26).
+
+```yml
+user/repo:
+  - source: workflows/
+    dest: .github/workflows/
+    exclude: |
+      node.yml
+      lint.yml
+```
+
+> [!NOTE]
+>
+> - `exclude` patterns are glob patterns and are relative to the `source` directory.
+> - You can also paste full paths like `workflows/lint.yml`; they will be normalized back to a path relative to `source`.
+
+### Include or exclude files when syncing directories
+
+Use `include` to limit which files are synced and `exclude` to skip files. Both accept newline-separated glob patterns relative to the source path. These filters are also respected when `deleteOrphaned` is enabled, so excluded files are not removed.
+
+**Precedence (directory sync):**
+
+1. If `include` is set, only matching files are considered.
+2. Then `exclude` removes files from that set.
+
+```yml
+user/repo:
+  - source: workflows/
+    include: |
+      **/*.yml
+      **/*.yaml
+    exclude: |
+      **/legacy/**
+```
+
+> [!NOTE]
+> Pattern matching uses `minimatch` (same glob style as many JS tooling ecosystems).
+
+### Don't replace existing file(s)
+
+By default if a file already exists in the target repository, it will be replaced. You can change this behaviour by setting the `replace` option to `false`.
+
+For single files, `replace: false` will skip syncing if the destination file already exists:
+
+```yml
+user/repo:
+  - source: .github/workflows/lint.yml
+    replace: false
+```
+
+For directories, `replace: false` is applied **file-by-file**:
+
+- Files that already exist at the destination are not overwritten.
+- New files are still copied.
+- Existing extra files in the destination are only removed if `deleteOrphaned: true`.
+
+```yml
+user/repo:
+  - source: workflows/
+    dest: .github/workflows/
+    replace: false
+```
+
+### Using templates
+
+You can render templates before syncing by using the [Jinja](https://jinja.palletsprojects.com/)-style template syntax. It will be compiled using [Nunjucks](https://mozilla.github.io/nunjucks/) and the output written to the specific file(s) or folder(s).
+
+Nunjucks supports variables and blocks among other things. To enable, set the `template` field to a context dictionary, or in case of no variables, `true`:
+
+```yml
+user/repo:
+  - source: src/README.md
+    template:
+      user:
+        name: Raven-Actions
+        handle: @raven-actions
+```
+
+In the source file you can then use these variables like this:
+
+```yml
+# README.md
+
+Created by {{ user.name }} ({{ user.handle }})
+```
+
+Result:
+
+```yml
+# README.md
+
+Created by Raven-Actions (@raven-actions)
+```
+
+You can also use `extends` with a relative path to inherit other templates. Take a look at Nunjucks [template syntax](https://mozilla.github.io/nunjucks/templating.html) for more info.
+
+```yml
+user/repo:
+  - source: .github/workflows/child.yml
+    template: true
+```
+
+```yml
+# child.yml
+{% extends './parent.yml' %}
+
+{% block some_block %}
+This is some content
+{% endblock %}
+```
+
+> [!WARNING]
+>
+> Nunjucks [does not sandbox template execution](https://mozilla.github.io/nunjucks/api.html#user-defined-templates-warning) itself, so by default this action hardens rendering against the most common escape technique: property-access chains like `{{ "".constructor.constructor("...")() }}` or `{{ range.constructor("...")() }}` that reach a JavaScript constructor. `constructor`, `__proto__`, `prototype`, and the legacy `__defineGetter__`/`__defineSetter__`/`__lookupGetter__`/`__lookupSetter__` accessors resolve to `undefined` while rendering instead.
+>
+> This is a **best-effort mitigation, not a full sandbox** - it doesn't limit the CPU/memory a runaway template can use, and a sufficiently creative payload may still find another way to misbehave. Only ever enable `template` for source files whose full content you trust (e.g. files you and your reviewed collaborators maintain); never enable it on files that accept unreviewed external contributions. You can disable this hardening entirely with the `TEMPLATE_SANDBOX: false` action input, but doing so is not recommended and logs a warning on every run.
+
+#### Built-in template variables
+
+Every Nunjucks template context automatically includes a `repo` object with information about the target repository:
+
+| Variable          | Description           | Example                        |
+|-------------------|-----------------------|--------------------------------|
+| `repo.url`        | Full HTTPS URL        | `https://github.com/user/repo` |
+| `repo.fullName`   | Host + owner + name   | `github.com/user/repo`         |
+| `repo.uniqueName` | Full name with branch | `github.com/user/repo@main`    |
+| `repo.host`       | Host name             | `github.com`                   |
+| `repo.user`       | Owner/organization    | `user`                         |
+| `repo.name`       | Repository name       | `repo`                         |
+| `repo.branch`     | Target branch         | `main`                         |
+
+This is useful for bulk templating across multiple repositories:
+
+```yml
+group:
+  repos: |
+    user/repo1
+    user/repo2
+  files:
+    - source: templates/README.md
+      dest: README.md
+      template: true
+```
+
+```md
+<!-- templates/README.md -->
+# {{ repo.name }}
+
+Repository: [{{ repo.fullName }}]({{ repo.url }})
+Maintained by: {{ repo.user }}
+```
+
+### Delete orphaned files
+
+With the `deleteOrphaned` option you can choose to delete files in the target repository if they are deleted in the source repository. The option defaults to `false` and works for both directories and individual files.
+
+If you want to enable this globally for all file entries, set the action input `DELETE_ORPHANED: true`. Individual file entries can still override it with `deleteOrphaned: true|false`.
+
+```yml
+user/repo:
+  - source: workflows/
+    dest: .github/workflows/
+    deleteOrphaned: true
+```
+
+For single files, if the source file no longer exists and `deleteOrphaned` is `true`, the destination file will be removed:
+
+```yml
+user/repo:
+  - source: config.json
+    dest: config.json
+    deleteOrphaned: true
+```
+
+### Sync the same files to multiple repositories
+
+Instead of repeating yourself listing the same files for multiple repositories, you can create a group:
+
+```yml
+group:
+  repos: |
+    user/repo
+    user/repo1
+  files:
+    - source: workflows/build.yml
+      dest: .github/workflows/build.yml
+    - source: LICENSE.md
+      dest: LICENSE
+```
+
+You can create multiple groups like this:
+
+```yml
+group:
+  # first group
+  - files:
+      - source: workflows/build.yml
+        dest: .github/workflows/build.yml
+      - source: LICENSE.md
+        dest: LICENSE
+    repos: |
+      user/repo1
+      user/repo2
+
+  # second group
+  - files:
+      - source: configs/dependabot.yml
+        dest: .github/dependabot.yml
+    repos: |
+      user/repo3
+      user/repo4
+```
+
+### Group-level reviewers
+
+You can specify reviewers at the group level to override the global `REVIEWERS` setting for specific groups:
+
+```yml
+group:
+  repos: |
+    user/repo1
+    user/repo2
+  files:
+    - source: rules/
+      dest: .cursor/rules/
+  reviewers:
+    - username1
+    - username2
+```
+
+This will automatically request a review from the specified users when PRs are created for repositories in this group.
+
+> [!NOTE]
+> Group-level `reviewers` override the global `REVIEWERS` input for that group.
+
+### Branch suffix for groups
+
+When syncing different file sets to the same repository, use `branchSuffix` to create unique PR branches:
+
+```yml
+group:
+  - repos: |
+      user/repo
+    files:
+      - source: config/
+        dest: config/
+    branchSuffix: config-sync
+
+  - repos: |
+      user/repo
+    files:
+      - source: workflows/
+        dest: .github/workflows/
+    branchSuffix: workflow-sync
+```
+
+The `branchSuffix` value is also appended to the PR title so parallel syncs are easy to distinguish.
+
+### Overwriting existing PRs and branches
+
+If `OVERWRITE_EXISTING_PR` is `true` (default), the action will try to reuse the same sync branch/PR each run for a given target repo + branch + `branchSuffix`.
+
+If `OVERWRITE_EXISTING_PR` is `false`, the action will create a new branch for each run instead (timestamp suffix). This is useful when you want to keep previous sync PRs open, or avoid non-fast-forward push failures when the existing sync branch has been modified.
+
+> [!NOTE]
+> Normal updates do not force-push. `REBASE` and closed-PR recovery use
+> `--force-with-lease`, so the update fails instead of overwriting a branch that
+> moved after the action checked it out.
+
+### Syncing branches
+
+You can also sync different branches from the same or different repositories (#51). For example, a repository named `foo/bar` with branch `main`, and `sync.yml` contents:
+
+```yml
+group:
+  repos: |
+    foo/bar@de
+    foo/bar@es
+    foo/bar@fr
+  files:
+    - source: .github/workflows/
+      dest: .github/workflows/
+```
+
+Here all files in `.github/workflows/` will be synced from the `main` branch to the branches `de`/`es`/`fr`.
+
+## 📖 Examples
+
+Here are a few examples to help you get started!
+
+### Basic Example
+
+**.github/sync.yml**
+
+```yml
+user/repository:
+  - LICENSE
+  - .gitignore
+```
+
+### Sync all workflow files
+
+This example will keep all your `.github/workflows` files in sync across multiple repositories:
+
+**.github/sync.yml**
+
+```yml
+group:
+  repos: |
+    user/repo1
+    user/repo2
+  files:
+    - source: .github/workflows/
+      dest: .github/workflows/
+```
+
+### Custom labels
+
+By default [repo-files-sync](https://github.com/raven-actions/repo-files-sync) will add the `sync` label to every PR it creates. You can turn this off by setting `PR_LABELS` to false, or specify your own labels:
+
+**.github/workflows/sync.yml**
+
+```yml
+- name: Run GitHub File Sync
+  uses: raven-actions/repo-files-sync@v2.0.0-rc.1
+  with:
+    GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    PR_LABELS: |
+      file-sync
+      automerge
+```
+
+### Assign a user to the PR
+
+You can tell [repo-files-sync](https://github.com/raven-actions/repo-files-sync) to assign users to the PR with `ASSIGNEES`:
+
+**.github/workflows/sync.yml**
+
+```yml
+- name: Run GitHub File Sync
+  uses: raven-actions/repo-files-sync@v2.0.0-rc.1
+  with:
+    GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    ASSIGNEES: raven-actions
+```
+
+### Request a PR review
+
+You can tell [repo-files-sync](https://github.com/raven-actions/repo-files-sync) to request a review of the PR from users with `REVIEWERS` and from teams with `TEAM_REVIEWERS`:
+
+**.github/workflows/sync.yml**
+
+```yml
+- name: Run GitHub File Sync
+  uses: raven-actions/repo-files-sync@v2.0.0-rc.1
+  with:
+    GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    REVIEWERS: |
+      raven-actions
+      raven-actions-bot
+    TEAM_REVIEWERS: engineering
+```
+
+### Custom GitHub Enterprise Host
+
+If your target repository is hosted on a GitHub Enterprise Server you can specify a custom host name like this:
+
+**.github/workflows/sync.yml**
+
+```yml
+https://custom.host/user/repo:
+  - path/to/file.txt
+
+# or in a group
+
+group:
+  - files:
+      - source: path/to/file.txt
+        dest: path/to/file.txt
+    repos: |
+      https://custom.host/user/repo
+```
+
+> **Note:** The key has to start with http to indicate that you want to use a custom host.
+> The target URL must use the same host as `GITHUB_SERVER_URL`; syncing across
+> different GitHub hosts is not supported because the action uses one token and
+> one GitHub API endpoint for the run.
+
+### Different branch prefix
+
+By default all new branches created in the target repo will be in the this format: `repo-sync/SOURCE_REPO_NAME/SOURCE_BRANCH_NAME`, with the SOURCE_REPO_NAME being replaced with the name of the source repo and SOURCE_BRANCH_NAME with the name of the source branch.
+
+If your repo name contains invalid characters, like a dot ([#32](https://github.com/raven-actions/repo-files-sync/issues/32)), you can specify a different prefix for the branch (the text before `/SOURCE_BRANCH_NAME`):
+
+**.github/workflows/sync.yml**
+
+```yml
+uses: raven-actions/repo-files-sync@v2.0.0-rc.1
+with:
+    GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    BRANCH_PREFIX: custom-branch
+```
+
+The new branch will then be `custom-branch/SOURCE_BRANCH_NAME`.
+
+> You can use `SOURCE_REPO_NAME` in your custom branch prefix as well and it will be replaced with the actual repo name
+
+### Custom commit body
+
+You can specify a custom commit body. This will be appended to the commit message, separated by two new lines. For example:
+
+**.github/workflows/sync.yml**
+
+```yml
+- name: Run GitHub File Sync
+  uses: raven-actions/repo-files-sync@v2.0.0-rc.1
+  with:
+    GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    COMMIT_BODY: "Change-type: patch"
+```
+
+The above example would result in a commit message that looks something like this:
+
+```text
+🔄 synced local '<filename>' with remote '<filename>'
+
+Change-type: patch
+```
+
+### Add content to the PR body
+
+You can add more content to the PR body with the `PR_BODY` option. For example:
+
+**.github/workflows/sync.yml**
+
+```yml
+- name: Run GitHub File Sync
+  uses: raven-actions/repo-files-sync@v2.0.0-rc.1
+  with:
+    GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    PR_BODY: This is your custom PR Body
+```
+
+It will be added below the first line of the body and above the list of changed files. The above example would result in a PR body that looks something like this:
+
+```text
+synced local file(s) with GITHUB_REPOSITORY.
+
+This is your custom PR Body
+
+▶ Changed files
+
+---
+
+This PR was created automatically by the repo-files-sync workflow run xxx.
+```
+
+### Fork and pull request workflow
+
+If you do not wish to grant this action write access to target repositories, you can specify a bot/user Github acccount that you do have access to with the `FORK` parameter.
+
+A fork of each target repository will be created on this account, and all changes will be pushed to a branch on the fork, instead of upstream. Pull requests will be opened from the forks to target repositories.
+
+Note: while you can open pull requests to target repositories without write access, some features, like applying labels, are not possible.
+
+> [!NOTE]
+> When `FORK` is set, the initial clone and the fork-branch fetch use full history instead of the usual shallow (depth 1) clone. This is needed to safely reconcile the fork's branch when it has diverged from the target repo (e.g. after a previous sync PR was merged upstream), and avoids a `shallow update not allowed` error. Non-fork syncs are unaffected and remain shallow.
+
+```yml
+uses: raven-actions/repo-files-sync@v2.0.0-rc.1
+with:
+    GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    FORK: file-sync-bot
+```
+
+### Advanced sync config
+
+Here's how I keep common files in sync across my repositories. The main repository [`raven-actions/.workflows`](https://github.com/raven-actions/.workflows) contains all the files I want to sync and the [repo-files-sync](https://github.com/raven-actions/repo-files-sync) Action which runs on every push.
+
+Using groups I can specify which file(s) should be synced to which repositories:
+
+**.github/sync.yml**
+
+```yml
+group:
+  # dependabot files
+  - files:
+      - source: configs/dependabot.yml
+        dest: .github/dependabot.yml
+      - source: workflows/dependencies/dependabot.yml
+        dest: .github/workflows/dependabot.yml
+    repos: |
+      raven-actions/do-spaces-action
+      raven-actions/running-at
+      raven-actions/spaces-cli
+      raven-actions/metadata-scraper
+      raven-actions/ejs-serve
+      raven-actions/feedback-js
+      raven-actions/drkmd.js
+
+  # GitHub Sponsors config
+  - files:
+      - source: configs/FUNDING.yml
+        dest: .github/FUNDING.yml
+    repos: |
+      raven-actions/do-spaces-action
+      raven-actions/running-at
+      raven-actions/spaces-cli
+      raven-actions/qrgen
+      raven-actions/metadata-scraper
+      raven-actions/ejs-serve
+      raven-actions/feedback-js
+      raven-actions/drkmd.js
+
+  # Semantic release
+  - files:
+      - source: workflows/versioning/release-scheduler.yml
+        dest: .github/workflows/release-scheduler.yml
+      - source: workflows/versioning/release.yml
+        dest: .github/workflows/release.yml
+      - source: configs/release.config.js
+        dest: release.config.js
+    repos: |
+      raven-actions/do-spaces-action
+      raven-actions/metadata-scraper
+      raven-actions/feedback-js
+      raven-actions/drkmd.js
+
+  # Stale issues workflow
+  - files:
+      - source: workflows/issues/stale.yml
+        dest: .github/workflows/stale.yml
+    repos: |
+      raven-actions/do-spaces-action
+      raven-actions/running-at
+      raven-actions/spaces-cli
+      raven-actions/qrgen
+      raven-actions/metadata-scraper
+      raven-actions/ejs-serve
+      raven-actions/feedback-js
+      raven-actions/drkmd.js
+
+  # Lint CI workflow
+  - files:
+      - source: workflows/node/lint.yml
+        dest: .github/workflows/lint.yml
+    repos: |
+      raven-actions/do-spaces-action
+      raven-actions/running-at
+      raven-actions/spaces-cli
+      raven-actions/metadata-scraper
+      raven-actions/ejs-serve
+      raven-actions/feedback-js
+      raven-actions/drkmd.js
+
+  # MIT License
+  - files:
+      - source: LICENSE
+        dest: LICENSE
+    repos: |
+      raven-actions/do-spaces-action
+      raven-actions/running-at
+      raven-actions/spaces-cli
+      raven-actions/qrgen
+      raven-actions/metadata-scraper
+      raven-actions/ejs-serve
+      raven-actions/feedback-js
+      raven-actions/drkmd.js
+```
+
+## 🏗️ Project changes - fork vs. source
+
+This project started as a fork of [repo-file-sync-action](https://github.com/BetaHuhn/repo-file-sync-action) (v1.21.1) and has since diverged substantially - rewritten from JavaScript to TypeScript, with an expanded feature set, hardened security posture, and a full test suite. Summary of the differences:
+
+### New features
+
+- `INLINE_CONFIG` input to supply the sync config inline (no `.github/sync.yml` required).
+- `REPOS` input to limit a run to specific target repositories without editing the config.
+- `PR_TITLE` input for a custom pull request title (independent of `COMMIT_AS_PR_TITLE`).
+- `REBASE` input to keep an open sync PR rebased on the latest base branch, similar to Dependabot.
+- `include` glob patterns (allowlist) for directory syncs, in addition to the original's `exclude` (denylist).
+- Global `DELETE_ORPHANED` default, and `deleteOrphaned` now also works for **single files** (the original only supported directories).
+- Group-level `reviewers` (overrides the global `REVIEWERS`) and `branchSuffix`, so the same target repo can receive multiple independent sync PRs.
+- `TEMPLATE_SANDBOX` (best-effort hardening against Nunjucks template-injection escapes, on by default) and `TEMPLATE_AUTOESCAPE` (toggle HTML-entity escaping for non-HTML templated files) inputs.
+- Always injects a built-in `repo` object (host/user/name/branch/url, etc.) into the Nunjucks template context for easier bulk templating.
+
+### Changed behavior
+
+- A single `GH_TOKEN` input replaces the original's `GH_PAT` / `GH_INSTALLATION_TOKEN` / `IS_FINE_GRAINED` inputs; the token type (classic PAT, fine-grained PAT, or GitHub App installation token) is auto-detected from its prefix instead of being manually flagged.
+- `GIT_EMAIL`/`GIT_USERNAME` are validated up front and required when using an installation token, instead of silently falling back to an invalid/empty identity.
+- Only exact, immutable version tags (e.g. `v1.0.0`) are published - no mutable `latest`/`v1` floating tags to pin to (the original updates a `latest`/`v1` tag on every release).
+- `exclude`/`include` accept full paths and are normalized relative to `source` (consistent `/` handling across OSes), and are respected by `deleteOrphaned` so excluded files are never removed.
+- Reviewer/team-reviewer request failures are re-raised with actionable guidance (e.g. missing collaborator/permission hints) instead of GitHub's terse API error alone.
+- The `FORK` workflow clones and fetches with full history instead of a shallow clone, avoiding `shallow update not allowed` failures when reconciling a diverged fork branch.
+- This action's own working directory (`TMP_DIR`) is automatically excluded from directory syncs when it falls inside the configured `source` (e.g. `source: ./`), instead of risking being copied into the destination.
+- A previously closed sync PR is reopened and its branch rebuilt, instead of being left closed with a stale/orphaned branch.
+- A target repo whose default branch has no commits yet is skipped with a warning instead of failing the whole run.
+- Non-fast-forward pushes use `--force-with-lease` instead of a plain force push, so a manually-modified sync branch is never silently clobbered.
+- `GH_TOKEN` API calls automatically retry on transient GitHub server errors, in addition to the existing rate-limit throttling.
+
+### Security & reliability hardening
+
+- Source/destination paths are validated against path traversal, absolute paths, symlink escapes, and Git metadata (`.git`) targeting.
+- All `git` commands run via `execFile` (no shell interpolation); `add`/`rm` use literal pathspecs and `clone` uses `--` before positional arguments to prevent argument/pathspec injection.
+
+## 👥 Contributing
+
+Contributions to the project are welcome! Please follow [Contributing Guide](https://github.com/raven-actions/repo-files-sync/blob/main/.github/CONTRIBUTING.md).
+
+## 🛡️ License
+
+This project is distributed under the terms of the [MIT](https://github.com/raven-actions/repo-files-sync/blob/main/LICENSE) license.

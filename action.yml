@@ -1,0 +1,189 @@
+---
+name: Repo Files Sync
+description: GitHub Action to Sync Files like Workflows Between Repositories.
+author: Raven Actions
+
+inputs:
+  GH_TOKEN:
+    description: |
+      Token used to access target repositories. Accepts a Personal Access Token
+      (classic or fine-grained) or a GitHub App installation token; the type is
+      detected automatically from the token prefix.
+      When an installation token (prefix `ghs_`) is supplied, commits are created
+      through the GitHub API (verified) and GIT_EMAIL/GIT_USERNAME are required.
+      Note: the default `GITHUB_TOKEN` will not work for cross-repo sync.
+    required: true
+  CONFIG_PATH:
+    description: |
+      Path to the sync configuration file.
+      Defaults to `.github/sync.yml`.
+    required: false
+  INLINE_CONFIG:
+    description: |
+      Inline YAML configuration (alternative to CONFIG_PATH).
+      When set, this is used instead of reading CONFIG_PATH.
+    required: false
+  REPOS:
+    description: |
+      Limit the sync to specific target repositories.
+      Comma-separated list of `owner/name` (optionally `@branch`) that must
+      match repositories already defined in the sync config. This only filters
+      which repositories are processed (keeping their order from the config);
+      the file configuration still comes from the existing config.
+      Names that do not match any configured repository are ignored (no error).
+      Leave empty to sync every repository from the config.
+    required: false
+  PR_LABELS:
+    description: |
+      Labels to add to the pull request.
+      Defaults to `sync`. Set to `false` to disable.
+    required: false
+  PR_TITLE:
+    description: |
+      Custom title for the pull request.
+      When set, it overrides the auto-generated title and COMMIT_AS_PR_TITLE.
+      Defaults to an empty string (auto-generated title).
+    required: false
+  PR_BODY:
+    description: |
+      Additional content to add in the PR description.
+      Defaults to an empty string.
+    required: false
+  ASSIGNEES:
+    description: |
+      Users to assign to the pull request.
+      Defaults to none.
+    required: false
+  REVIEWERS:
+    description: |
+      Users to request a review from.
+      Defaults to none.
+    required: false
+  TEAM_REVIEWERS:
+    description: |
+      Teams to request a review from.
+      Defaults to none.
+    required: false
+  COMMIT_PREFIX:
+    description: |
+      Prefix for commit message and pull request title.
+      Defaults to 🔄.
+    required: false
+  COMMIT_BODY:
+    description: |
+      Commit message body.
+      Appended to the commit message, separated by two line returns.
+      Defaults to an empty string.
+    required: false
+  COMMIT_EACH_FILE:
+    description: |
+      Commit each configured file/directory separately.
+      Defaults to true.
+    required: false
+  GIT_EMAIL:
+    description: |
+      Email used for commits.
+      Required when using a GitHub App installation token.
+    required: false
+  GIT_USERNAME:
+    description: |
+      Username used for commits.
+      Required when using a GitHub App installation token.
+    required: false
+  TMP_DIR:
+    description: |
+      Working directory where all sync operations are performed.
+      Defaults to `tmp-${Date.now().toString()}`.
+    required: false
+  DRY_RUN:
+    description: |
+      Runs the sync logic but does not push any changes.
+      Defaults to false.
+    required: false
+  SKIP_CLEANUP:
+    description: |
+      Skip removing the temporary directory (useful for debugging).
+      Defaults to false.
+    required: false
+  OVERWRITE_EXISTING_PR:
+    description: |
+      Reuse the same sync branch/PR between runs.
+      If false, create a new branch per run.
+      Defaults to true.
+    required: false
+  REBASE:
+    description: |
+      Keep an existing sync pull request up to date with the target (base)
+      branch, similar to Dependabot's rebase. When the PR branch falls behind
+      the base branch it is rebuilt on the latest base and force-updated, which
+      discards any commits pushed manually to the sync branch.
+      Requires OVERWRITE_EXISTING_PR (default) and has no effect with SKIP_PR.
+      Defaults to false.
+    required: false
+  ORIGINAL_MESSAGE:
+    description: |
+      Re-use the original commit message for commits.
+      Works only if the workflow is triggered by a push
+      containing a single commit.
+      Defaults to false.
+    required: false
+  COMMIT_AS_PR_TITLE:
+    description: |
+      Use the commit message as PR title.
+      Works only if ORIGINAL_MESSAGE is true and exactly one commit is created.
+      Defaults to false.
+    required: false
+  SKIP_PR:
+    description: |
+      Skips creating a Pull Request and pushes directly to the default branch.
+      Defaults to false
+    required: false
+  BRANCH_PREFIX:
+    description: |
+      Specify a different prefix for the new branch in the target repo.
+      Defaults to repo-sync/SOURCE_REPO_NAME
+    required: false
+  DELETE_ORPHANED:
+    description: |
+      Global default for deleting orphaned files in target repositories.
+      Used when file-level `deleteOrphaned` is not set.
+      Defaults to false.
+    required: false
+  FORK:
+    description: |
+      Specify the user account for a fork and pull-request workflow.
+      Defaults to false.
+    required: false
+  TEMPLATE_SANDBOX:
+    description: |
+      Harden Nunjucks template rendering (files using `template`) against the
+      common property-access chains (e.g. `constructor`, `__proto__`) used to
+      escalate template syntax into arbitrary JavaScript execution.
+      This is a best-effort mitigation, not a full sandbox - only enable
+      `template` on files from fully trusted sources regardless of this setting.
+      Set to false to disable; a warning is logged every run while disabled.
+      Defaults to true.
+    required: false
+  TEMPLATE_AUTOESCAPE:
+    description: |
+      Enable Nunjucks' autoescape option for rendered `template` files.
+      Autoescaping is meant for HTML/XML output and will replace characters
+      like `'` with `&#39;`, which usually isn't desired when templating
+      non-HTML files (YAML, shell scripts, etc.).
+      Set to false to disable autoescaping.
+      Defaults to true.
+    required: false
+
+outputs:
+  pull_request_urls:
+    description: |
+      JSON array of created Pull Request URLs.
+      Empty when no PRs were created.
+
+runs:
+  using: node24
+  main: dist/index.mjs
+
+branding:
+  icon: git-pull-request
+  color: gray-dark
