@@ -3,6 +3,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { assertOrphanReleaseBranch } from './release-branch-assert-orphan.mjs';
+
 /**
  * Creates an ORPHAN branch carrying only the required files for publishing.
  *
@@ -19,6 +21,8 @@ import path from 'node:path';
  * - TAG (required): Release tag/version (e.g., "v1.0.0")
  * - FILES (required): Multiline list of files/directories to include
  * - BRANCH_PREFIX (optional): Branch prefix, default: "release"
+ * - BASE_BRANCH (optional): Branch the release artifact must be orphaned from,
+ *   default: the repository default branch or "main"
  * - COMMIT_MESSAGE (optional): Commit message template, use {tag} placeholder, default: "chore(release): {tag}"
  * - SOURCE_SHA (optional): Source commit the artifacts were built from, recorded
  *   as a `Source-Commit` trailer (an orphan branch has no parent link to it)
@@ -37,6 +41,7 @@ export default async function main({ context, github, core }) {
 
   // Optional inputs with defaults
   const branchPrefix = core.getInput('BRANCH_PREFIX') || 'release';
+  const baseBranch = core.getInput('BASE_BRANCH') || context.payload?.repository?.default_branch || 'main';
   const commitMessageTemplate = core.getInput('COMMIT_MESSAGE') || 'chore(release): {tag}';
   const sourceSha = core.getInput('SOURCE_SHA');
 
@@ -61,6 +66,14 @@ export default async function main({ context, github, core }) {
   try {
     const { data: ref } = await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
     tipSha = ref.object.sha;
+    await assertOrphanReleaseBranch({
+      context,
+      github,
+      core,
+      branch,
+      baseBranch,
+      expectedSha: tipSha
+    });
     const { data: tipCommit } = await github.rest.git.getCommit({ owner, repo, commit_sha: tipSha });
     tipTreeSha = tipCommit.tree.sha;
     core.info(`Branch ${branch} exists at ${tipSha}; extending its history.`);

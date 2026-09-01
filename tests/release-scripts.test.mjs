@@ -21,6 +21,7 @@ vi.mock('node:fs', () => ({
 }));
 
 const { default: createReleaseBranch } = await import('../.github/scripts/release-branch-create.mjs');
+const { default: verifyOrphanReleaseBranch } = await import('../.github/scripts/release-branch-assert-orphan.mjs');
 const { default: createReleasePr } = await import('../.github/scripts/release-pr-create.mjs');
 const { default: finalizeRelease } = await import('../.github/scripts/release-finalize.mjs');
 const { default: cleanupBranches } = await import('../.github/scripts/release-branches-cleanup.mjs');
@@ -84,7 +85,15 @@ function makeGithub(overrides = {}) {
     paginate: overrides.paginate ?? vi.fn(async () => []),
     rest: {
       git,
-      repos: { getContent: vi.fn(), listBranches: vi.fn(), listReleases: vi.fn(), ...overrides.repos },
+      repos: {
+        getContent: vi.fn(),
+        listBranches: vi.fn(),
+        listReleases: vi.fn(),
+        compareCommitsWithBasehead: vi.fn(async () => {
+          throw httpError(404);
+        }),
+        ...overrides.repos
+      },
       pulls: { list: vi.fn(async () => ({ data: [] })), create: vi.fn(), update: vi.fn(), ...overrides.pulls }
     }
   };
@@ -96,6 +105,54 @@ beforeEach(() => {
   fsMocks.readFileSync.mockReturnValue(Buffer.from('file contents'));
   fsMocks.statSync.mockReturnValue({ isDirectory: () => false });
   fsMocks.readdirSync.mockReturnValue([]);
+});
+
+describe('release-branch-assert-orphan.mjs', () => {
+  const inputs = {
+    BRANCH: 'prerelease/v1.2.3',
+    BASE_BRANCH: 'main',
+    EXPECTED_SHA: 'release-sha'
+  };
+
+  function refGithub() {
+    return makeGithub({
+      git: {
+        getRef: vi.fn(async ({ ref }) => ({
+          data: { object: { sha: ref === 'heads/main' ? 'main-sha' : 'release-sha' } }
+        }))
+      }
+    });
+  }
+
+  it('accepts an unrelated artifact branch and exposes its verified sha', async () => {
+    const github = refGithub();
+    const core = makeCore(inputs);
+
+    await verifyOrphanReleaseBranch({ context, github, core });
+
+    expect(github.rest.repos.compareCommitsWithBasehead).toHaveBeenCalledWith({
+      owner: 'raven-actions',
+      repo: 'repo-files-sync',
+      basehead: 'main...prerelease/v1.2.3'
+    });
+    expect(core.outputs['sha']).toBe('release-sha');
+  });
+
+  it('rejects a branch outside the release artifact namespaces', async () => {
+    const core = makeCore({ ...inputs, BRANCH: 'release-prep/v1.2.3' });
+
+    await expect(verifyOrphanReleaseBranch({ context, github: refGithub(), core })).rejects.toThrow(
+      'must match prerelease/vX.Y.Z or release/vX.Y.Z'
+    );
+  });
+
+  it('rejects an artifact branch whose tip differs from the expected sha', async () => {
+    const core = makeCore({ ...inputs, EXPECTED_SHA: 'other-sha' });
+
+    await expect(verifyOrphanReleaseBranch({ context, github: refGithub(), core })).rejects.toThrow(
+      'moved: expected other-sha, found release-sha'
+    );
+  });
 });
 
 describe('release-branch-create.mjs', () => {
@@ -153,6 +210,23 @@ describe('release-branch-create.mjs', () => {
 
     expect(github.rest.git.createCommit).toHaveBeenCalledWith(expect.objectContaining({ parents: ['tip-sha'] }));
     expect(github.rest.git.updateRef).toHaveBeenCalledWith(expect.objectContaining({ force: false }));
+  });
+
+  it('rejects an existing release branch that shares history with main', async () => {
+    const github = makeGithub({
+      git: {
+        getRef: vi.fn(async () => ({ data: { object: { sha: 'tip-sha' } } }))
+      },
+      repos: {
+        compareCommitsWithBasehead: vi.fn(async () => ({ data: { status: 'ahead' } }))
+      }
+    });
+
+    await expect(createReleaseBranch({ context, github, core: makeCore(inputs) })).rejects.toThrow(
+      'prerelease/* and release/* branches must be orphan branches'
+    );
+    expect(github.rest.git.createCommit).not.toHaveBeenCalled();
+    expect(github.rest.git.updateRef).not.toHaveBeenCalled();
   });
 
   it('leaves the branch untouched when a rerun produces an identical tree', async () => {

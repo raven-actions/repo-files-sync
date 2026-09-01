@@ -88,6 +88,17 @@ jobs:
           echo "rc_tag=${rc_tag}" >> "$GITHUB_OUTPUT"
           echo "Releasing ${version} from ${rc_tag} at ${branch_sha}"
 
+      - name: Verify release artifact branch is orphaned
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { default: script } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/release-branch-assert-orphan.mjs`)
+            await script({ context, github, core })
+        env:
+          INPUT_BRANCH: prerelease/${{ steps.resolve.outputs.version }}
+          INPUT_BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          INPUT_EXPECTED_SHA: ${{ steps.resolve.outputs.sha }}
+
       - name: Write release notes
         env:
           BODY: ${{ github.event.pull_request.body }}
