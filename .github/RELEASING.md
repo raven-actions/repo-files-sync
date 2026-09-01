@@ -75,6 +75,8 @@ flowchart TD
 
    > **Why the trigger is gated.** `workflow_run` starts with a privileged token even when the run that triggered it was an unprivileged pull request from a fork, and its `branches:` filter matches the triggering run's *head* branch name - which a fork can freely name `main`. Because both jobs check out `workflow_run.head_sha` and execute code from that checkout, each one requires `workflow_run.event == 'push'`, `head_repository.full_name == github.repository`, and `head_branch == <default branch>`. Keep those conditions on any job added to this workflow, and never run code from an untrusted `head_sha` in a job that holds write permissions.
 
+> **Release artifact branches are always orphan branches.** Every `prerelease/vX.Y.Z` branch, and any future `release/vX.Y.Z` artifact branch, must have no common ancestor with the default branch. The branch creator checks existing carriers before extending them, and each workflow re-verifies ancestry before creating an RC or final release. Never use the `prerelease/*` or `release/*` namespaces for ordinary development or configuration PRs.
+
 **Promoting a draft to a real RC.** RCs are never published automatically. When a draft looks good, open it on the **Releases** page and click **Publish release**. That creates the immutable `vX.Y.Z-rc.N` tag at the current `prerelease/vX.Y.Z` branch tip and advances the proposed number for the next draft.
 
 ## Cutting the final release
@@ -91,6 +93,8 @@ flowchart TD
    - deletes the `prerelease/vX.Y.Z` and `release-prep/vX.Y.Z` branches.
 
 > The release PR is created by the workflow token, so GitHub does not start `pull_request` workflow runs for it. **Prepare Release** therefore dispatches the **CI** workflow against the `release-prep/vX.Y.Z` branch (`workflow_dispatch` is the one event `GITHUB_TOKEN` is allowed to trigger). Those check runs attach to the branch's head commit - which is the PR's head commit - so the required `Lint`, `Build`, `Type Check` and `Test Check` contexts are satisfied without bypassing the ruleset. `PR Title` still does not run on the release PR; its title is correct by construction, so keep that check out of the required list.
+
+> `release-prep/*` is not a release artifact namespace. It is a short-lived PR integration branch and intentionally descends from `main`; GitHub cannot open a pull request between unrelated histories. The published tag is created from the orphan `prerelease/vX.Y.Z` carrier, never from `release-prep/*`.
 
 ## Cleaning up orphaned release branches
 
