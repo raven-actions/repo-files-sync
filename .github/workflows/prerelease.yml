@@ -100,7 +100,7 @@ jobs:
 
       - name: Get release details
         id: release-details
-        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4.8.0
+        uses: orhun/git-cliff-action@3d96a18cc4ec17e9dc69ddcc424ccafaf1f78ce2 # v4.9.0
         with:
           config: .github/cliff.toml
           args: --github-repo "${{ github.repository }}" --unreleased --bump --strip header
@@ -159,7 +159,7 @@ jobs:
       - name: Generate RC notes
         id: rc-notes
         if: steps.guard.outputs.skip != 'true'
-        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4.8.0
+        uses: orhun/git-cliff-action@3d96a18cc4ec17e9dc69ddcc424ccafaf1f78ce2 # v4.9.0
         with:
           config: .github/cliff.toml
           args: ${{ steps.rc.outputs.args }}
