@@ -14,7 +14,7 @@
     "@octokit/plugin-throttling": "^11.0.5",
     "ajv": "^8.20.0",
     "fs-extra": "^11.4.0",
-    "js-yaml": "^5.4.1",
+    "js-yaml": "^5.4.2",
     "minimatch": "^10.2.6",
     "nunjucks": "^3.2.4"
   },
