@@ -110,7 +110,15 @@ export async function processFile(
       core.info('Source is directory');
     }
 
-    await copy(source, dest, isDirectory, file, item, isDirectory ? excludedWorkingDirs(localSource) : []);
+    await copy(
+      source,
+      dest,
+      isDirectory,
+      file,
+      item,
+      git.workingDir,
+      isDirectory ? excludedWorkingDirs(localSource) : []
+    );
     await git.add(file.dest);
   }
 

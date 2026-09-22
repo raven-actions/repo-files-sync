@@ -16,7 +16,7 @@ vi.mock('@actions/core', () => ({
   setOutput: vi.fn()
 }));
 
-import { copy, write } from '../src/helpers.js';
+import { copy, resolvePathWithinRoot, write } from '../src/helpers.js';
 import type { FileConfig, RepoConfig, RepoInfo } from '../src/types.js';
 
 describe('helpers.ts - copy and write functions', () => {
@@ -130,6 +130,168 @@ describe('helpers.ts - copy and write functions', () => {
   });
 
   describe('copy', () => {
+    describe.each([
+      { mode: 'templates', template: true, replace: true },
+      { mode: 'copies without overwrite', template: false, replace: false }
+    ])('destination confinement for $mode', ({ template, replace }) => {
+      it('rejects a nested destination link outside the repository before writing', async () => {
+        const source = path.join(srcDir, 'templates');
+        const destination = path.join(destDir, 'synced');
+        const outside = path.join(testDir, 'outside-target');
+        await fs.ensureDir(path.join(source, 'nested'));
+        await fs.ensureDir(destination);
+        await fs.ensureDir(outside);
+        await fs.writeFile(path.join(outside, 'marker.txt'), 'unchanged');
+        await fs.writeFile(path.join(source, 'nested', replace ? 'marker.txt' : 'new.txt'), 'new {{ repo.name }}');
+        await fs.symlink(outside, path.join(destination, 'nested'), process.platform === 'win32' ? 'junction' : 'dir');
+
+        const checkedDestination = await resolvePathWithinRoot(destDir, 'synced', 'Destination');
+        const file: FileConfig = {
+          source,
+          dest: destination,
+          template,
+          replace,
+          deleteOrphaned: false,
+          exclude: undefined
+        };
+        await expect(copy(source, checkedDestination, true, file, mockRepoConfig, destDir)).rejects.toThrow(
+          'escapes the repository root through a symbolic link'
+        );
+
+        expect(await fs.readFile(path.join(outside, 'marker.txt'), 'utf8')).toBe('unchanged');
+        expect(await fs.pathExists(path.join(outside, 'new.txt'))).toBe(false);
+      });
+
+      it('rejects a nested link into Git metadata inside the repository', async () => {
+        const source = path.join(srcDir, 'templates');
+        const destination = path.join(destDir, 'synced');
+        const hooks = path.join(destDir, '.git', 'hooks');
+        await fs.ensureDir(path.join(source, 'nested'));
+        await fs.ensureDir(destination);
+        await fs.ensureDir(hooks);
+        await fs.writeFile(path.join(hooks, 'marker.txt'), 'unchanged');
+        await fs.writeFile(path.join(source, 'nested', replace ? 'marker.txt' : 'new.txt'), 'new contents');
+        await fs.symlink(hooks, path.join(destination, 'nested'), process.platform === 'win32' ? 'junction' : 'dir');
+
+        const file: FileConfig = {
+          source,
+          dest: destination,
+          template,
+          replace,
+          deleteOrphaned: false,
+          exclude: undefined
+        };
+        await expect(copy(source, destination, true, file, mockRepoConfig, destDir)).rejects.toThrow(
+          'cannot target Git metadata through a symbolic link'
+        );
+
+        expect(await fs.readFile(path.join(hooks, 'marker.txt'), 'utf8')).toBe('unchanged');
+        expect(await fs.pathExists(path.join(hooks, 'new.txt'))).toBe(false);
+      });
+
+      it('allows a nested link to an ordinary directory in the target repository', async () => {
+        const source = path.join(srcDir, 'templates');
+        const destination = path.join(destDir, 'synced');
+        const target = path.join(destDir, 'shared');
+        await fs.ensureDir(path.join(source, 'nested'));
+        await fs.ensureDir(destination);
+        await fs.ensureDir(target);
+        await fs.writeFile(path.join(source, 'nested', 'new.txt'), 'new contents');
+        await fs.symlink(target, path.join(destination, 'nested'), process.platform === 'win32' ? 'junction' : 'dir');
+
+        const file: FileConfig = {
+          source,
+          dest: destination,
+          template,
+          replace,
+          deleteOrphaned: false,
+          exclude: undefined
+        };
+        await copy(source, destination, true, file, mockRepoConfig, destDir);
+
+        expect(await fs.readFile(path.join(target, 'new.txt'), 'utf8')).toBe('new contents');
+      });
+
+      it('preserves excluded paths without following unsafe destination links', async () => {
+        const source = path.join(srcDir, 'templates');
+        const destination = path.join(destDir, 'synced');
+        const outside = path.join(testDir, 'outside-target');
+        await fs.ensureDir(path.join(source, 'nested'));
+        await fs.ensureDir(destination);
+        await fs.ensureDir(outside);
+        await fs.writeFile(path.join(source, 'nested', 'new.txt'), 'excluded');
+        await fs.writeFile(path.join(source, 'safe.txt'), 'safe');
+        await fs.symlink(outside, path.join(destination, 'nested'), process.platform === 'win32' ? 'junction' : 'dir');
+
+        const file: FileConfig = {
+          source,
+          dest: destination,
+          template,
+          replace,
+          deleteOrphaned: true,
+          exclude: ['nested/']
+        };
+        await copy(source, destination, true, file, mockRepoConfig, destDir);
+
+        expect(await fs.readFile(path.join(destination, 'safe.txt'), 'utf8')).toBe('safe');
+        expect((await fs.lstat(path.join(destination, 'nested'))).isSymbolicLink()).toBe(true);
+        expect(await fs.readdir(outside)).toEqual([]);
+      });
+    });
+
+    it.each([
+      false,
+      true
+    ])('preserves dangling source links across repeated syncs with template=%s', async (template) => {
+      const source = path.join(srcDir, 'links');
+      const destination = path.join(destDir, 'links');
+      await fs.ensureDir(source);
+      await fs.symlink(
+        path.join(srcDir, 'missing'),
+        path.join(source, 'link'),
+        process.platform === 'win32' ? 'junction' : 'dir'
+      );
+      const file: FileConfig = {
+        source,
+        dest: destination,
+        template,
+        replace: true,
+        deleteOrphaned: false,
+        exclude: undefined
+      };
+
+      await copy(source, destination, true, file, mockRepoConfig, destDir);
+      await copy(source, destination, true, file, mockRepoConfig, destDir);
+
+      expect((await fs.lstat(path.join(destination, 'link'))).isSymbolicLink()).toBe(true);
+      expect(await fs.readlink(path.join(destination, 'link'))).toBe(await fs.readlink(path.join(source, 'link')));
+      await expect(fs.lstat(path.join(srcDir, 'missing'))).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+
+    it('removes an orphaned link itself without touching the outside target', async () => {
+      const source = path.join(srcDir, 'files');
+      const destination = path.join(destDir, 'files');
+      const outside = path.join(testDir, 'outside-target');
+      await fs.ensureDir(source);
+      await fs.ensureDir(destination);
+      await fs.ensureDir(outside);
+      await fs.writeFile(path.join(outside, 'marker.txt'), 'unchanged');
+      await fs.symlink(outside, path.join(destination, 'orphan'), process.platform === 'win32' ? 'junction' : 'dir');
+      const file: FileConfig = {
+        source,
+        dest: destination,
+        template: false,
+        replace: true,
+        deleteOrphaned: true,
+        exclude: undefined
+      };
+
+      await copy(source, destination, true, file, mockRepoConfig, destDir);
+
+      expect(await fs.pathExists(path.join(destination, 'orphan'))).toBe(false);
+      expect(await fs.readFile(path.join(outside, 'marker.txt'), 'utf8')).toBe('unchanged');
+    });
+
     describe('file copying', () => {
       it('should copy a single file', async () => {
         const srcFile = path.join(srcDir, 'file.txt');
@@ -146,7 +308,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig);
+        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.pathExists(destFile)).toBe(true);
         expect(await fs.readFile(destFile, 'utf-8')).toBe('File content');
@@ -167,7 +329,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig);
+        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig, destDir);
 
         const content = await fs.readFile(destFile, 'utf-8');
         expect(content).toBe('Hello World!');
@@ -188,7 +350,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig);
+        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig, destDir);
 
         const content = await fs.readFile(destFile, 'utf-8');
         expect(content).toBe('Repo: github.com/test/repo');
@@ -210,7 +372,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig);
+        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig, destDir);
 
         const content = await fs.readFile(destFile, 'utf-8');
         expect(content).toBe('Original content');
@@ -232,7 +394,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig);
+        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig, destDir);
 
         const content = await fs.readFile(destFile, 'utf-8');
         expect(content).toBe('Original content');
@@ -253,7 +415,7 @@ describe('helpers.ts - copy and write functions', () => {
           include: ['other-template.txt']
         };
 
-        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig);
+        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.pathExists(destFile)).toBe(false);
       });
@@ -278,7 +440,7 @@ describe('helpers.ts - copy and write functions', () => {
           ]
         };
 
-        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig);
+        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.pathExists(destFile)).toBe(true);
         expect(await fs.readFile(destFile, 'utf-8')).toBe('File content');
@@ -299,7 +461,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig);
+        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.pathExists(destFile)).toBe(true);
         const content = await fs.readFile(destFile, 'utf-8');
@@ -322,7 +484,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig);
+        await copy(srcFile, destFile, false, fileConfig, mockRepoConfig, destDir);
 
         const content = await fs.readFile(destFile, 'utf-8');
         expect(content).toBe('New content');
@@ -347,7 +509,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.pathExists(path.join(destSubDir, 'file1.txt'))).toBe(true);
         expect(await fs.pathExists(path.join(destSubDir, 'file2.txt'))).toBe(true);
@@ -375,7 +537,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.readFile(path.join(destSubDir, 'existing.txt'), 'utf-8')).toBe('Original content');
         expect(await fs.readFile(path.join(destSubDir, 'new.txt'), 'utf-8')).toBe('Brand new');
@@ -398,7 +560,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.pathExists(path.join(destSubDir, 'level1', 'level2', 'deep.txt'))).toBe(true);
       });
@@ -420,7 +582,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: [path.join(srcSubDir, 'exclude.txt')]
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.pathExists(path.join(destSubDir, 'keep.txt'))).toBe(true);
         expect(await fs.pathExists(path.join(destSubDir, 'exclude.txt'))).toBe(false);
@@ -444,7 +606,7 @@ describe('helpers.ts - copy and write functions', () => {
           include: ['**/*.keep']
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.pathExists(path.join(destSubDir, 'keep.keep'))).toBe(true);
         expect(await fs.pathExists(path.join(destSubDir, 'skip.txt'))).toBe(false);
@@ -467,7 +629,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: ['**/*.log']
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.pathExists(path.join(destSubDir, 'keep.txt'))).toBe(true);
         expect(await fs.pathExists(path.join(destSubDir, 'exclude.log'))).toBe(false);
@@ -493,7 +655,7 @@ describe('helpers.ts - copy and write functions', () => {
           include: ['**/*.keep']
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.pathExists(path.join(destSubDir, 'keep.keep'))).toBe(true);
         expect(await fs.pathExists(path.join(destSubDir, 'skip.txt'))).toBe(false);
@@ -518,7 +680,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.readFile(path.join(destSubDir, 'file1.txt'), 'utf-8')).toBe('Name: Test');
         expect(await fs.readFile(path.join(destSubDir, 'file2.txt'), 'utf-8')).toBe('Version: 1.0.0');
@@ -545,7 +707,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.readFile(path.join(destSubDir, 'a.txt'), 'utf-8')).toBe('Existing A');
         expect(await fs.readFile(path.join(destSubDir, 'b.txt'), 'utf-8')).toBe('Hello World');
@@ -568,7 +730,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: ['exclude.txt']
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.pathExists(path.join(destSubDir, 'include.txt'))).toBe(true);
         expect(await fs.readFile(path.join(destSubDir, 'include.txt'), 'utf-8')).toBe('Include: Test');
@@ -594,7 +756,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: ['subdir/']
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.pathExists(path.join(destSubDir, 'root.txt'))).toBe(true);
         // File in excluded directory should not be rendered
@@ -618,7 +780,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         expect((await fs.lstat(path.join(destSubDir, 'link'))).isSymbolicLink()).toBe(true);
         expect(await fs.readFile(path.join(destSubDir, 'target', 'file.txt'), 'utf8')).toBe('Name: repo');
@@ -648,7 +810,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.pathExists(path.join(destSubDir, 'keep.txt'))).toBe(true);
         expect(await fs.pathExists(path.join(destSubDir, 'orphan.txt'))).toBe(false);
@@ -676,7 +838,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: ['**/*.log']
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         // Excluded orphan should be preserved
         expect(await fs.pathExists(path.join(destSubDir, 'excluded-orphan.log'))).toBe(true);
@@ -704,7 +866,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         // .git should be preserved
         expect(await fs.pathExists(path.join(destSubDir, '.git', 'config'))).toBe(true);
@@ -731,7 +893,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: [path.join(srcSubDir, 'excluded-orphan.txt')]
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         // Excluded orphan should be preserved
         expect(await fs.pathExists(path.join(destSubDir, 'excluded-orphan.txt'))).toBe(true);
@@ -755,7 +917,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         // Both files should be copied (fs.copy doesn't filter hidden by default)
         expect(await fs.pathExists(path.join(destSubDir, 'visible.txt'))).toBe(true);
@@ -779,7 +941,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: [path.join(srcSubDir, 'excluded-dir', 'file.txt')]
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.pathExists(path.join(destSubDir, 'keep.txt'))).toBe(true);
         // The excluded file should not be copied
@@ -805,7 +967,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: ['subdir/']
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         expect(await fs.pathExists(path.join(destSubDir, 'keep.txt'))).toBe(true);
         expect(await fs.pathExists(path.join(destSubDir, 'subdir', 'file1.txt'))).toBe(false);
@@ -833,7 +995,7 @@ describe('helpers.ts - copy and write functions', () => {
             exclude: ['*.tmp']
           };
 
-          await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+          await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
           expect((await fs.lstat(path.join(destSubDir, 'link.txt'))).isSymbolicLink()).toBe(true);
           expect(await fs.readlink(path.join(destSubDir, 'link.txt'))).toBe('target.txt');
@@ -865,7 +1027,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir);
 
         // All .git files should be preserved
         expect(await fs.pathExists(path.join(destSubDir, '.git', 'config'))).toBe(true);
@@ -895,7 +1057,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: undefined
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, [workingDir]);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir, [workingDir]);
 
         expect(await fs.pathExists(path.join(destSubDir, 'keep.txt'))).toBe(true);
         expect(await fs.pathExists(path.join(destSubDir, 'tmp-working-dir'))).toBe(false);
@@ -920,7 +1082,7 @@ describe('helpers.ts - copy and write functions', () => {
           exclude: ['**/*.log']
         };
 
-        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, [workingDir]);
+        await copy(srcSubDir + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, destDir, [workingDir]);
 
         expect(await fs.pathExists(path.join(destSubDir, 'keep.txt'))).toBe(true);
         expect(await fs.pathExists(path.join(destSubDir, 'skip.log'))).toBe(false);
@@ -957,7 +1119,7 @@ describe('helpers.ts - copy and write functions', () => {
         };
 
         await expect(
-          copy(srcRoot + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, [workingDir])
+          copy(srcRoot + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, clonedRepoDir, [workingDir])
         ).resolves.not.toThrow();
 
         expect(await fs.pathExists(path.join(destSubDir, 'README.md'))).toBe(true);
@@ -991,7 +1153,15 @@ describe('helpers.ts - copy and write functions', () => {
         };
 
         await expect(
-          copy(srcRoot + '/', destSubDir + '/', true, fileConfig, mockRepoConfig, [workingDir])
+          copy(
+            srcRoot + '/',
+            destSubDir + '/',
+            true,
+            fileConfig,
+            mockRepoConfig,
+            path.join(workingDir, 'target-clone'),
+            [workingDir]
+          )
         ).resolves.not.toThrow();
 
         expect(await fs.pathExists(path.join(destSubDir, 'some', 'sibling-dir', 'keep.txt'))).toBe(true);

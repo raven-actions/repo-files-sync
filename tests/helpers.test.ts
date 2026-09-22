@@ -543,6 +543,52 @@ describe('helpers.ts', () => {
         lstatSpy.mockRestore();
       }
     });
+
+    it.each([
+      'alias/config',
+      'alias/hooks/new-file'
+    ])('should reject Git metadata aliases at %s', async (input) => {
+      await fs.ensureDir(path.join(rootDir, '.git'));
+      await fs.writeFile(path.join(rootDir, '.git', 'config'), 'metadata');
+      await fs.symlink(
+        path.join(rootDir, '.git'),
+        path.join(rootDir, 'alias'),
+        process.platform === 'win32' ? 'junction' : 'dir'
+      );
+
+      await expect(resolvePathWithinRoot(rootDir, input, 'Destination')).rejects.toThrow(
+        'cannot target Git metadata through a symbolic link'
+      );
+    });
+
+    it('should allow an in-repository symbolic-link ancestor', async () => {
+      await fs.ensureDir(path.join(rootDir, 'files'));
+      await fs.symlink(
+        path.join(rootDir, 'files'),
+        path.join(rootDir, 'alias'),
+        process.platform === 'win32' ? 'junction' : 'dir'
+      );
+
+      await expect(resolvePathWithinRoot(rootDir, 'alias/new.txt', 'Destination')).resolves.toBe(
+        path.join(rootDir, 'alias', 'new.txt')
+      );
+    });
+
+    it('should validate the parent without following a link that will itself be replaced', async () => {
+      await fs.symlink(
+        `${rootDir}-missing`,
+        path.join(rootDir, 'link'),
+        process.platform === 'win32' ? 'junction' : 'dir'
+      );
+
+      await expect(resolvePathWithinRoot(rootDir, 'link', 'Destination', false)).resolves.toBe(
+        path.join(rootDir, 'link')
+      );
+      await expect(resolvePathWithinRoot(rootDir, 'link/file.txt', 'Destination', false)).rejects.toThrow(
+        'contains an invalid symbolic link'
+      );
+      await expect(resolvePathWithinRoot(rootDir, '.', 'Destination', false)).resolves.toBe(rootDir);
+    });
   });
 
   describe('addTrailingSlash', () => {

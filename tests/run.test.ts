@@ -178,6 +178,7 @@ describe('run.ts - processFile', () => {
     expect(source.endsWith('/')).toBe(true);
     expect(dest.endsWith('/')).toBe(true);
     expect(isDirectory).toBe(true);
+    expect(mocks.copy.mock.calls[0]?.[5]).toBe(git.workingDir);
     expect(git.add).toHaveBeenCalledWith('dest/file.txt');
   });
 

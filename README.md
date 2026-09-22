@@ -249,6 +249,12 @@ user/repo:
     dest: .github/workflows/
 ```
 
+Directory syncs validate each destination against the target repository root.
+Writes through symbolic-link ancestors outside that repository or into Git
+metadata are rejected, including when templating or using `replace: false`.
+Source links in directory syncs are copied as links, not followed or rendered.
+Deleting an orphaned link removes the link itself, not its target.
+
 ### Exclude certain files when syncing directories
 
 Using the `exclude` key you can specify files you want to exclude when syncing entire directories (#26).

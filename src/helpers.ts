@@ -269,8 +269,14 @@ export function isPathWithinRoot(root: string, candidate: string): boolean {
 /**
  * Resolve a repository-relative path and reject traversal, Git metadata, and
  * existing symlink ancestors that escape the repository root.
+ * Operations that replace or remove a link itself must not follow its final segment.
  */
-export async function resolvePathWithinRoot(root: string, input: string, label: string): Promise<string> {
+export async function resolvePathWithinRoot(
+  root: string,
+  input: string,
+  label: string,
+  followFinalSymlink = true
+): Promise<string> {
   if (!input || path.isAbsolute(input)) {
     throw new Error(`${label} path "${input}" must be relative to the repository root`);
   }
@@ -287,7 +293,7 @@ export async function resolvePathWithinRoot(root: string, input: string, label: 
     throw new Error(`${label} path "${input}" cannot target Git metadata`);
   }
 
-  let existingPath = resolvedPath;
+  let existingPath = followFinalSymlink || resolvedPath === absoluteRoot ? resolvedPath : path.dirname(resolvedPath);
   while (existingPath !== absoluteRoot) {
     try {
       await fs.lstat(existingPath);
@@ -301,22 +307,27 @@ export async function resolvePathWithinRoot(root: string, input: string, label: 
     }
   }
 
-  try {
-    const [
-      realRoot,
-      realExistingPath
-    ] = await Promise.all([
-      fs.realpath(absoluteRoot),
-      fs.realpath(existingPath)
-    ]);
-    if (!isPathWithinRoot(realRoot, realExistingPath)) {
-      throw new Error(`${label} path "${input}" escapes the repository root through a symbolic link`);
-    }
-  } catch (error) {
-    if ((error as Error).message.includes('escapes the repository root')) {
-      throw error;
-    }
+  const [
+    realRoot,
+    realExistingPath
+  ] = await Promise.all([
+    fs.realpath(absoluteRoot),
+    fs.realpath(existingPath)
+  ]).catch((error: unknown) => {
     throw new Error(`${label} path "${input}" contains an invalid symbolic link`, { cause: error });
+  });
+  const realDestination = path.resolve(realExistingPath, path.relative(existingPath, resolvedPath));
+
+  if (!isPathWithinRoot(realRoot, realDestination)) {
+    throw new Error(`${label} path "${input}" escapes the repository root through a symbolic link`);
+  }
+  if (
+    path
+      .relative(realRoot, realDestination)
+      .split(path.sep)
+      .some((segment) => segment.toLowerCase() === '.git')
+  ) {
+    throw new Error(`${label} path "${input}" cannot target Git metadata through a symbolic link`);
   }
 
   return resolvedPath;
@@ -515,9 +526,11 @@ export function createFilterFunc(
 export async function copyDirectoryExcludingPaths(
   src: string,
   dest: string,
-  filterFunc: (file: string) => boolean,
-  excludeAbsolutePaths: string[]
+  filterFunc: (source: string, destination: string) => Promise<boolean>,
+  excludeAbsolutePaths: string[],
+  destinationRoot: string
 ): Promise<void> {
+  await resolvePathWithinRoot(destinationRoot, path.relative(destinationRoot, dest) || '.', 'Destination');
   await fs.ensureDir(dest);
 
   const entries = await readdir(src, { withFileTypes: true });
@@ -530,17 +543,16 @@ export async function copyDirectoryExcludingPaths(
       continue;
     }
 
-    if (!filterFunc(entrySrc)) {
+    const entryDest = path.join(dest, entry.name);
+    if (!(await filterFunc(entrySrc, entryDest))) {
       continue;
     }
-
-    const entryDest = path.join(dest, entry.name);
 
     if (entry.isDirectory() && excludeAbsolutePaths.some((excluded) => isPathWithinRoot(entrySrc, excluded))) {
       // This branch leads down to an excluded path - keep recursing manually
       // instead of handing it to fs.copy, which would eventually see `dest`
       // as a subdirectory of it once we reach the excluded path's parent.
-      await copyDirectoryExcludingPaths(entrySrc, entryDest, filterFunc, excludeAbsolutePaths);
+      await copyDirectoryExcludingPaths(entrySrc, entryDest, filterFunc, excludeAbsolutePaths, destinationRoot);
     } else {
       await fs.copy(entrySrc, entryDest, { filter: filterFunc });
     }
@@ -556,12 +568,29 @@ export async function copy(
   isDirectory: boolean,
   file: FileConfig,
   item: RepoConfig,
+  destinationRoot: string,
   excludeAbsolutePaths: string[] = []
 ): Promise<void> {
   const deleteOrphaned = isDirectory && file.deleteOrphaned;
   const { exclude, template, replace } = file;
   const filterFunc = createFilterFunc(src, exclude, file.include);
   const shouldFilter = isDirectory || exclude !== undefined || file.include !== undefined;
+  const root = path.resolve(destinationRoot);
+
+  const validateDestination = (destination: string, followFinalSymlink = true): Promise<string> =>
+    resolvePathWithinRoot(root, path.relative(root, destination) || '.', 'Destination', followFinalSymlink);
+
+  const copyFilter = async (source: string, destination: string): Promise<boolean> => {
+    if (shouldFilter && !filterFunc(source)) {
+      return false;
+    }
+    await validateDestination(destination, false);
+    return true;
+  };
+
+  if (isDirectory) {
+    await validateDestination(dest);
+  }
 
   const shouldSkipDest = async (destPath: string): Promise<boolean> => {
     if (replace !== false) {
@@ -586,6 +615,8 @@ export async function copy(
 
         const srcPath = absoluteSrc;
         const destPath = path.join(dest, srcFile);
+        const sourceStat = await fs.lstat(srcPath);
+        await validateDestination(destPath, !sourceStat.isSymbolicLink());
 
         // Per-file replace: skip rendering if destination file already exists
         if (await shouldSkipDest(destPath)) {
@@ -593,7 +624,6 @@ export async function copy(
           continue;
         }
 
-        const sourceStat = await fs.lstat(srcPath);
         if (sourceStat.isSymbolicLink()) {
           await fs.ensureDir(path.dirname(destPath));
           await fs.copy(srcPath, destPath, { dereference: false });
@@ -604,6 +634,7 @@ export async function copy(
     } else {
       core.debug(`Render file ${src} to ${dest}`);
       if (filterFunc(src)) {
+        await validateDestination(dest);
         if (await shouldSkipDest(dest)) {
           core.debug(`Skipping ${dest} because replace is false and destination exists`);
           return;
@@ -620,7 +651,7 @@ export async function copy(
         return;
       }
 
-      await fs.copy(src, dest, shouldFilter ? { filter: filterFunc } : undefined);
+      await fs.copy(src, dest, { filter: copyFilter });
     } else if (replace === false) {
       // Per-file replace for directories: copy new files, but don't overwrite existing ones
       const files = await readFilesRecursive(src, true, excludeAbsolutePaths);
@@ -632,6 +663,7 @@ export async function copy(
         }
 
         const absoluteDest = path.join(dest, relativeFile);
+        await validateDestination(absoluteDest, false);
         if (await shouldSkipDest(absoluteDest)) {
           core.debug(`Skipping ${absoluteDest} because replace is false and destination exists`);
           continue;
@@ -641,9 +673,9 @@ export async function copy(
         await fs.copy(absoluteSrc, absoluteDest, { dereference: false });
       }
     } else if (excludeAbsolutePaths.length > 0) {
-      await copyDirectoryExcludingPaths(src, dest, filterFunc, excludeAbsolutePaths);
+      await copyDirectoryExcludingPaths(src, dest, copyFilter, excludeAbsolutePaths, root);
     } else {
-      await fs.copy(src, dest, { filter: filterFunc });
+      await fs.copy(src, dest, { filter: copyFilter });
     }
   }
 
@@ -680,6 +712,7 @@ export async function copy(
 
       if (!shouldExist.has(destFile)) {
         const filePath = path.join(dest, destFile);
+        await validateDestination(filePath, false);
         core.debug(`Found an orphaned file in the target repo - ${filePath}`);
         core.debug(`Removing file ${destFile}`);
         await fs.remove(filePath);
