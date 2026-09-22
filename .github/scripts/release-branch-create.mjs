@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { assertOrphanReleaseBranch } from './release-branch-assert-orphan.mjs';
+import { readSourceCommit } from './release-history.mjs';
 
 /**
  * Creates an ORPHAN branch carrying only the required files for publishing.
@@ -63,6 +64,7 @@ export default async function main({ context, github, core }) {
   // Resolve the current branch tip, if the branch already exists.
   let tipSha = null;
   let tipTreeSha = null;
+  let tipSourceSha = null;
   try {
     const { data: ref } = await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
     tipSha = ref.object.sha;
@@ -76,6 +78,7 @@ export default async function main({ context, github, core }) {
     });
     const { data: tipCommit } = await github.rest.git.getCommit({ owner, repo, commit_sha: tipSha });
     tipTreeSha = tipCommit.tree.sha;
+    if (sourceSha) tipSourceSha = readSourceCommit(tipCommit.message);
     core.info(`Branch ${branch} exists at ${tipSha}; extending its history.`);
   } catch (error) {
     const err = /** @type {{ status?: number }} */ (error);
@@ -238,8 +241,8 @@ export default async function main({ context, github, core }) {
   core.info('Creating trees...');
   const rootTreeSha = await buildTreeFromFiles(fileBlobs);
 
-  // Nothing changed since the last release commit - avoid piling up empty commits.
-  if (tipSha && tipTreeSha === rootTreeSha) {
+  // Identical artifacts are reusable only when they record the same source boundary.
+  if (tipSha && tipTreeSha === rootTreeSha && (!sourceSha || tipSourceSha === sourceSha.toLowerCase())) {
     core.info(`Branch ${branch} already carries these exact files at ${tipSha}; leaving it untouched.`);
     core.setOutput('name', branch);
     core.setOutput('sha', tipSha);

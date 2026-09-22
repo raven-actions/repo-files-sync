@@ -68,9 +68,9 @@ flowchart TD
 2. **CI** (`ci.yml`) runs lint, type-check, build, and the cross-OS test matrix.
 3. **Prerelease** (`prerelease.yml`) runs on CI success for a **push to this repository's own default branch** (and is skipped for `chore(release)` commits):
    - rebuilds `dist/` from the exact tested commit and attaches a signed SLSA build provenance attestation,
-   - skips entirely if no version-bumping commits landed (no-op guard),
+   - computes version bumps from the last published stable release's recorded source commit and skips when no releasable source changes remain (including no incremental changes after the latest published RC),
    - pins the `README.md` usage examples to the RC tag `vX.Y.Z-rc.N`, so the draft/prerelease advertises the exact version a consumer would install from it (the final release re-pins these to the stable `vX.Y.Z` when cut),
-   - creates a GitHub-**verified** commit on the `prerelease/vX.Y.Z` branch (curated release files only); this branch tip always points at the latest RC. The branch is an **orphan branch** - it shares no history with `main`, so its commits read as "here are the release artifacts" instead of a commit that deletes the rest of the repository. The CI-tested `main` commit the artifacts were built from is recorded as a `Source-Commit:` trailer in the commit message. A run whose artifacts are byte-identical to the current tip leaves the branch untouched instead of adding an empty commit,
+   - creates a GitHub-**verified** commit on the `prerelease/vX.Y.Z` branch (curated release files only); this branch tip always points at the latest RC. The branch is an **orphan branch** - it shares no history with `main`, so its commits read as "here are the release artifacts" instead of a commit that deletes the rest of the repository. The CI-tested `main` commit the artifacts were built from is recorded as a `Source-Commit:` trailer in the commit message. A rerun leaves the branch untouched only when both its artifacts and source SHA match; an identical tree built from a different source records the new source boundary,
    - overwrites the pending **draft** prerelease `vX.Y.Z-rc.N` (deleting any previous draft RC first), so at most one draft is ever pending and it targets that branch tip.
 
    > **Why the trigger is gated.** `workflow_run` starts with a privileged token even when the run that triggered it was an unprivileged pull request from a fork, and its `branches:` filter matches the triggering run's *head* branch name - which a fork can freely name `main`. Because both jobs check out `workflow_run.head_sha` and execute code from that checkout, each one requires `workflow_run.event == 'push'`, `head_repository.full_name == github.repository`, and `head_branch == <default branch>`. Keep those conditions on any job added to this workflow, and never run code from an untrusted `head_sha` in a job that holds write permissions.
@@ -81,9 +81,23 @@ flowchart TD
 
 ## Cutting the final release
 
+### Source history and version labels
+
+Release tags identify orphan artifact commits, not positions in the source history. The workflows resolve published releases to their `Source-Commit` trailers and pass source-to-source ranges to the pinned git-cliff CLI. Tag discovery is disabled for those ranges; the prior version is supplied separately through git-cliff's JSON context, so old features cannot cause another version bump.
+
+The first release uses the full source history and the configured initial version (`v2.0.0`). Later stable notes span the previous stable source through the published RC's source. RC notes contain only changes after the previous published RC's source. Full changelog sections and compare links use these same source boundaries.
+
+Drafts and tags without a published release do not establish a released baseline. Missing, duplicate, malformed, unknown, or non-ancestor source metadata stops generation rather than silently treating the artifact tag as a source commit. The final README-only commit preserves `Source-Commit` so subsequent releases retain the correct boundary.
+
+The [release-history tests](../tests/release-history.test.mjs) use temporary Git repositories.
+Set `RELEASE_TEST_GIT_CLIFF` to a git-cliff 2.14.1 executable to include the native
+version-bump and changelog integration test. These tests do not publish releases.
+
+### Prepare and publish
+
 1. Run the **Prepare Release** workflow (Actions tab -> Prepare Release -> Run workflow). It:
    - computes the target version and the **full** notes since the last final release,
-   - verifies a `prerelease/vX.Y.Z` branch exists and its tip matches the latest published `vX.Y.Z-rc.N` tag (publish the current draft RC first if the branch has moved),
+   - verifies a `prerelease/vX.Y.Z` branch exists and its tip matches the latest published `vX.Y.Z-rc.N` tag, and that no releasable source changes have landed after that RC (publish the current draft first if needed); ignored commits alone do not require another RC,
    - updates `CHANGELOG.md` and pins the `README.md` usage examples to `vX.Y.Z` (so the default branch docs match the published tag),
    - opens a PR titled `chore(release): vX.Y.Z` with the full notes as its body.
 2. Review the PR (notes + `CHANGELOG.md`). Edit the PR body if you want to adjust the published notes. **Merge it** (squash).

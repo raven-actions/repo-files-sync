@@ -35,16 +35,35 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # Full notes since the last FINAL release (cliff.toml tag_pattern matches
-      # only stable vX.Y.Z, so RC tags are ignored and the range spans the whole
-      # development cycle). --bump also yields the target version.
-      - name: Compute version and full release notes
-        id: notes
+      - name: Resolve published source baseline
+        id: history
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { default: script } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/release-history.mjs`)
+            await script({ context, github, core })
+
+      - name: Install git-cliff and preview source changes
         uses: orhun/git-cliff-action@3d96a18cc4ec17e9dc69ddcc424ccafaf1f78ce2 # v4.9.0
         with:
+          version: v2.14.1
           config: .github/cliff.toml
-          args: --github-repo "${{ github.repository }}" --unreleased --bump --strip header
+          args: --github-repo "${{ github.repository }}" --tag-pattern '^$' --strip all "${{ steps.history.outputs.range }}"
         env:
+          OUTPUT: git-cliff/source-preview.md
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Compute version, full notes and CHANGELOG.md
+        id: notes
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { default: script } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/release-notes.mjs`)
+            await script({ context, core })
+        env:
+          INPUT_MODE: stable
+          INPUT_HISTORY: ${{ steps.history.outputs.history }}
+          INPUT_CLI_PATH: ${{ runner.temp }}/git-cliff/bin/git-cliff
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Verify release artifact branch is orphaned
@@ -56,6 +75,7 @@ jobs:
         env:
           INPUT_BRANCH: prerelease/${{ steps.notes.outputs.version }}
           INPUT_BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          INPUT_EXPECTED_SHA: ${{ steps.notes.outputs.candidate_sha }}
 
       # The final release must reuse the latest PUBLISHED RC. A draft RC updates
       # the prerelease/<version> branch before it creates a git tag, so require
@@ -64,40 +84,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.notes.outputs.version }}
+          RC_TAG: ${{ steps.notes.outputs.candidate_tag }}
+          RC_SHA: ${{ steps.notes.outputs.candidate_sha }}
         run: |
-          latest="$(git tag --list --sort=-v:refname \
-            | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || true)"
-          if [ -n "${latest}" ] && [ "${VERSION#v}" = "${latest#v}" ]; then
-            echo "::error::Nothing to release: computed version ${VERSION} equals the latest release ${latest}."
-            exit 1
-          fi
           branch_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/refs/heads/prerelease/${VERSION}" --jq '.object.sha' 2>/dev/null || true)"
           if [ -z "${branch_sha}" ]; then
             echo "::error::No release candidate branch prerelease/${VERSION}. Merge changes to main and let an RC build first."
             exit 1
           fi
-          last_n="$(git tag --list "${VERSION}-rc.*" | sed 's/.*-rc\.//' | grep -E '^[0-9]+$' | sort -n | tail -n1 || true)"
-          if [ -z "${last_n}" ]; then
-            echo "::error::No published release candidate tag for ${VERSION}. Publish the current draft RC before preparing the final release."
+          if [ "${branch_sha}" != "${RC_SHA}" ]; then
+            echo "::error::prerelease/${VERSION} points at ${branch_sha}, but latest published RC ${RC_TAG} points at ${RC_SHA}. Publish the current draft RC before preparing the final release."
             exit 1
           fi
-          rc_tag="${VERSION}-rc.${last_n}"
-          rc_sha="$(git rev-list -n 1 "${rc_tag}")"
-          if [ "${branch_sha}" != "${rc_sha}" ]; then
-            echo "::error::prerelease/${VERSION} points at ${branch_sha}, but latest published RC ${rc_tag} points at ${rc_sha}. Publish the current draft RC before preparing the final release."
-            exit 1
-          fi
-          echo "Published release candidate ${rc_tag} found at branch tip ${branch_sha}."
-
-      # Regenerate the full CHANGELOG.md file (all releases + the bumped one).
-      - name: Generate CHANGELOG.md
-        uses: orhun/git-cliff-action@3d96a18cc4ec17e9dc69ddcc424ccafaf1f78ce2 # v4.9.0
-        with:
-          config: .github/cliff.toml
-          args: --github-repo "${{ github.repository }}" --bump
-        env:
-          OUTPUT: CHANGELOG.md
-          GITHUB_TOKEN: ${{ github.token }}
+          echo "Published release candidate ${RC_TAG} found at branch tip ${branch_sha}."
 
       # Pin the action version in the README usage examples to the version being
       # released, so the docs rendered from the default branch always match the

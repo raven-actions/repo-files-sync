@@ -2,6 +2,8 @@
 
 import { Buffer } from 'node:buffer';
 
+import { readSourceCommit } from './release-history.mjs';
+
 /**
  * Re-pins the README usage examples to the final release tag at publish time.
  *
@@ -38,6 +40,7 @@ export default async function main({ context, github, core }) {
   const { data: ref } = await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
   const tipSha = ref.object.sha;
   const { data: tipCommit } = await github.rest.git.getCommit({ owner, repo, commit_sha: tipSha });
+  const sourceSha = readSourceCommit(tipCommit.message);
 
   // Read README.md at the RC commit and re-pin this action's version to the final tag.
   const { data: file } = await github.rest.repos.getContent({ owner, repo, path: 'README.md', ref: tipSha });
@@ -74,7 +77,7 @@ export default async function main({ context, github, core }) {
   const { data: commit } = await github.rest.git.createCommit({
     owner,
     repo,
-    message: `chore(release): ${version}`,
+    message: `chore(release): ${version}\n\nSource-Commit: ${sourceSha}\n`,
     tree: tree.sha,
     parents: [tipSha]
   });

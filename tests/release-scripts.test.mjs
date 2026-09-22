@@ -246,6 +246,39 @@ describe('release-branch-create.mjs', () => {
     expect(core.outputs['sha']).toBe('tip-sha');
   });
 
+  it.each([
+    true,
+    false
+  ])('reuses identical artifacts only when the source also matches (%s)', async (sameSource) => {
+    const source = 'a'.repeat(40);
+    const github = makeGithub({
+      git: {
+        getRef: vi.fn(async () => ({ data: { object: { sha: 'tip-sha' } } })),
+        getCommit: vi.fn(async () => ({
+          data: { tree: { sha: 'tree-sha' }, message: `chore(release): v1.2.3\n\nSource-Commit: ${source}\n` }
+        }))
+      }
+    });
+    const nextSource = sameSource ? source : 'b'.repeat(40);
+    const core = makeCore({ ...inputs, SOURCE_SHA: nextSource });
+
+    await createReleaseBranch({ context, github, core });
+
+    if (sameSource) {
+      expect(github.rest.git.createCommit).not.toHaveBeenCalled();
+      expect(github.rest.git.updateRef).not.toHaveBeenCalled();
+      expect(core.outputs.sha).toBe('tip-sha');
+    } else {
+      expect(github.rest.git.createCommit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: `chore(release): v1.2.3\n\nSource-Commit: ${nextSource}\n`,
+          parents: ['tip-sha']
+        })
+      );
+      expect(github.rest.git.updateRef).toHaveBeenCalledWith(expect.objectContaining({ force: false }));
+    }
+  });
+
   it('rethrows unexpected errors while resolving the branch', async () => {
     const github = makeGithub({
       git: {
@@ -342,6 +375,8 @@ describe('release-pr-create.mjs', () => {
 
 describe('release-finalize.mjs', () => {
   const inputs = { VERSION: 'v1.2.3', BRANCH: 'prerelease/v1.2.3' };
+  const source = 'a'.repeat(40);
+  const rcMessage = `chore(release): v1.2.3\n\nSource-Commit: ${source}\n`;
 
   const contentResponse = (readme) => ({
     data: { type: 'file', content: Buffer.from(readme, 'utf8').toString('base64') }
@@ -351,7 +386,7 @@ describe('release-finalize.mjs', () => {
     const github = makeGithub({
       git: {
         getRef: vi.fn(async () => ({ data: { object: { sha: 'rc-sha' } } })),
-        getCommit: vi.fn(async () => ({ data: { tree: { sha: 'rc-tree' } } }))
+        getCommit: vi.fn(async () => ({ data: { tree: { sha: 'rc-tree' }, message: rcMessage } }))
       },
       repos: {
         getContent: vi.fn(async () => contentResponse('uses: raven-actions/repo-files-sync@v1.2.3-rc.4'))
@@ -368,13 +403,18 @@ describe('release-finalize.mjs', () => {
       expect.objectContaining({ base_tree: 'rc-tree', tree: [expect.objectContaining({ path: 'README.md' })] })
     );
     expect(core.outputs['sha']).toBe('commit-sha');
+    expect(github.rest.git.createCommit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: `chore(release): v1.2.3\n\nSource-Commit: ${source}\n`
+      })
+    );
   });
 
   it('is a no-op when the README already pins the final version', async () => {
     const github = makeGithub({
       git: {
         getRef: vi.fn(async () => ({ data: { object: { sha: 'rc-sha' } } })),
-        getCommit: vi.fn(async () => ({ data: { tree: { sha: 'rc-tree' } } }))
+        getCommit: vi.fn(async () => ({ data: { tree: { sha: 'rc-tree' }, message: rcMessage } }))
       },
       repos: { getContent: vi.fn(async () => contentResponse('uses: raven-actions/repo-files-sync@v1.2.3')) }
     });
@@ -391,7 +431,7 @@ describe('release-finalize.mjs', () => {
     const github = makeGithub({
       git: {
         getRef: vi.fn(async () => ({ data: { object: { sha: 'rc-sha' } } })),
-        getCommit: vi.fn(async () => ({ data: { tree: { sha: 'rc-tree' } } }))
+        getCommit: vi.fn(async () => ({ data: { tree: { sha: 'rc-tree' }, message: rcMessage } }))
       },
       repos: { getContent: vi.fn(async () => ({ data: [] })) }
     });
@@ -399,6 +439,19 @@ describe('release-finalize.mjs', () => {
     await expect(finalizeRelease({ context, github, core: makeCore(inputs) })).rejects.toThrow(
       'README.md not found at the prerelease branch tip'
     );
+  });
+
+  it('refuses to create a stable baseline without a verified source trailer', async () => {
+    const github = makeGithub({
+      git: {
+        getRef: vi.fn(async () => ({ data: { object: { sha: 'rc-sha' } } })),
+        getCommit: vi.fn(async () => ({ data: { tree: { sha: 'rc-tree' }, message: 'chore(release): v1.2.3' } }))
+      }
+    });
+
+    await expect(finalizeRelease({ context, github, core: makeCore(inputs) })).rejects.toThrow('Source-Commit');
+    expect(github.rest.git.createCommit).not.toHaveBeenCalled();
+    expect(github.rest.git.updateRef).not.toHaveBeenCalled();
   });
 });
 
