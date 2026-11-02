@@ -15,7 +15,7 @@
     "ajv": "^8.20.0",
     "fs-extra": "^11.4.1",
     "js-yaml": "^5.5.0",
-    "minimatch": "^10.2.6",
+    "minimatch": "^11.0.2",
     "nunjucks": "^3.2.4"
   },
   "devDependencies": {
@@ -35,7 +35,7 @@
     "prettier-plugin-multiline-arrays": "^4.1.11",
     "syncpack": "^15.3.3",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.72.0",
+    "typescript-eslint": "^8.72.1",
     "vitest": "^5.0.5"
   },
   "files": [
